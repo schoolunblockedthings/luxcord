@@ -1,9 +1,10 @@
-const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
+const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// FIXED: Explicitly grab createClient from the window object to stop the crash
+const { createClient } = window.supabase;
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Grabs the username and room code directly out of the URL bar parameters
 const urlParams = new URLSearchParams(window.location.search);
 const username = urlParams.get('name');
 const currentRoom = urlParams.get('room');
@@ -107,13 +108,21 @@ async function sendMessage() {
     messageInput.value = "";
     charCounter.innerText = "0/100";
 
-    await supabaseClient.from('user_status').update({ is_typing: false }).eq('room', currentRoom).eq('name', username);
+    try {
+        await supabaseClient.from('user_status').update({ is_typing: false }).eq('room', currentRoom).eq('name', username);
 
-    await supabaseClient.from('chat_messages').insert({
-        room: currentRoom,
-        name: username,
-        message: text
-    });
+        const { error } = await supabaseClient.from('chat_messages').insert({
+            room: currentRoom,
+            name: username,
+            message: text
+        });
+
+        if (error) {
+            alert("Error sending message: " + error.message);
+        }
+    } catch (err) {
+        alert("Exception while sending: " + err.message);
+    }
 }
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
