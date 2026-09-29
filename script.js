@@ -1372,7 +1372,6 @@ async function refreshDM() {
                 "DM message load error:",
                 result.error
             );
-
             return;
         }
 
@@ -1381,8 +1380,7 @@ async function refreshDM() {
         const ids = [
             ...new Set(
                 messages.map(
-                    (message) =>
-                        message.sender_id
+                    (message) => message.sender_id
                 )
             )
         ];
@@ -1411,8 +1409,7 @@ async function refreshDM() {
                 )
             );
 
-        const container =
-            $("dm-messages");
+        const container = $("dm-messages");
 
         if (!container) {
             return;
@@ -1424,77 +1421,165 @@ async function refreshDM() {
                 container.clientHeight <
             150;
 
-        container.innerHTML =
-            messages
-                .map((message) => {
-                    const user =
-                        profileMap[
-                            message.sender_id
-                        ] || {};
+        container.innerHTML = messages
+            .map((message) => {
+                const user =
+                    profileMap[
+                        message.sender_id
+                    ] || {};
 
-                    const name =
-                        user.display_name ||
-                        user.username ||
-                        "User";
+                const name =
+                    user.display_name ||
+                    user.username ||
+                    "User";
 
-                    return `
-                        <article class="message">
+                const avatar =
+                    name[0]?.toUpperCase() || "?";
 
-                            <div class="message-avatar">
-                                ${esc(
-                                    name[0]?.toUpperCase() ||
-                                    "?"
-                                )}
-                            </div>
+                const time =
+                    new Date(
+                        message.created_at
+                    ).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit"
+                    });
 
-                            <div class="message-body">
+                return `
+<article
+    class="message"
+    style="
+        display:grid;
+        grid-template-columns:36px minmax(0,1fr);
+        gap:10px;
+        width:100%;
+        margin:0 0 9px 0;
+        padding:0;
+        height:auto;
+        min-height:0;
+        align-items:start;
+    "
+>
+    <div
+        class="message-avatar"
+        style="
+            grid-column:1;
+            grid-row:1;
+            width:36px;
+            height:36px;
+            min-width:36px;
+            margin:0;
+            padding:0;
+        "
+    >${esc(avatar)}</div>
 
-                                <div class="message-head">
-                                    <b>
-                                        ${esc(name)}
-                                    </b>
+    <div
+        class="message-body"
+        style="
+            grid-column:2;
+            grid-row:1;
+            display:block;
+            width:100%;
+            height:auto;
+            min-height:0;
+            margin:0;
+            padding:0;
+        "
+    >
+        <div
+            class="message-head"
+            style="
+                display:flex;
+                flex-direction:row;
+                align-items:baseline;
+                justify-content:flex-start;
+                gap:8px;
+                width:100%;
+                height:18px;
+                min-height:18px;
+                margin:0;
+                padding:0;
+                line-height:18px;
+            "
+        ><b
+            style="
+                display:inline;
+                margin:0;
+                padding:0;
+                line-height:18px;
+            "
+        >${esc(name)}</b><time
+            style="
+                display:inline;
+                margin:0;
+                padding:0;
+                line-height:16px;
+                font-size:11px;
+            "
+        >${esc(time)}</time></div>
 
-                                    <time>
-                                        ${new Date(
-                                            message.created_at
-                                        ).toLocaleTimeString(
-                                            [],
-                                            {
-                                                hour: "2-digit",
-                                                minute: "2-digit"
-                                            }
-                                        )}
-                                    </time>
-                                </div>
+        <div
+            class="message-text"
+            style="
+                display:block;
+                width:100%;
+                height:auto;
+                min-height:19px;
+                margin:1px 0 0 0;
+                padding:0;
+                white-space:pre-wrap;
+                word-break:break-word;
+                overflow-wrap:anywhere;
+                line-height:19px;
+                text-align:left;
+            "
+        >${esc(message.message)}</div>
 
-                                <div class="message-text">
-                                    ${esc(
-                                        message.message
-                                    )}
-                                </div>
-
-                                <div class="message-actions">
-
-                                    <button
-                                        onclick="reactDM(${message.id}, '❤️')"
-                                    >
-                                        ❤️
-                                    </button>
-
-                                    <button
-                                        onclick="reactDM(${message.id}, '👍')"
-                                    >
-                                        👍
-                                    </button>
-
-                                </div>
-
-                            </div>
-
-                        </article>
-                    `;
-                })
-                .join("");
+        <div
+            class="message-actions"
+            style="
+                display:flex;
+                flex-direction:row;
+                align-items:center;
+                justify-content:flex-start;
+                gap:2px;
+                width:100%;
+                height:20px;
+                min-height:20px;
+                margin:1px 0 0 0;
+                padding:0;
+            "
+        ><button
+            onclick="reactDM(${message.id}, '❤️')"
+            style="
+                display:inline-flex;
+                align-items:center;
+                justify-content:center;
+                width:auto;
+                height:20px;
+                min-height:20px;
+                margin:0;
+                padding:1px 4px;
+                line-height:18px;
+            "
+        >❤️</button><button
+            onclick="reactDM(${message.id}, '👍')"
+            style="
+                display:inline-flex;
+                align-items:center;
+                justify-content:center;
+                width:auto;
+                height:20px;
+                min-height:20px;
+                margin:0;
+                padding:1px 4px;
+                line-height:18px;
+            "
+        >👍</button></div>
+    </div>
+</article>
+`;
+            })
+            .join("");
 
         if (wasNearBottom || messages.length <= 1) {
             container.scrollTop =
