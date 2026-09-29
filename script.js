@@ -1,19 +1,11 @@
 const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
-// FIXED: Bulletproof initialization framework to prevent loading crashes
 let supabaseClient = null;
-if (window.supabase) {
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-} else {
-    alert("Critical: Supabase library failed to load over the network. Check your CDN tag!");
-}
-
 const urlParams = new URLSearchParams(window.location.search);
 const username = urlParams.get('name');
 const currentRoom = urlParams.get('room');
 
-// FIXED: Replaced the raw web address with a valid public audio file stream
 let audio = new Audio("https://code.org");
 
 const chatDisplay = document.getElementById("chat-display");
@@ -25,7 +17,23 @@ if (!username || !currentRoom) {
     window.location.href = "index.html";
 } else {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
-    if (supabaseClient) setupChatRoom();
+    
+    // FIXED: Instead of crashing instantly, it polls every 500ms to wait for Supabase to be ready
+    let checkCount = 0;
+    const libraryLoader = setInterval(() => {
+        if (window.supabase) {
+            clearInterval(libraryLoader);
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            setupChatRoom();
+        } else {
+            checkCount++;
+            // If it takes more than 5 seconds (10 checks), then assume it is truly blocked by the network
+            if (checkCount > 10) {
+                clearInterval(libraryLoader);
+                alert("Critical Error: None of the backup network servers responded. The network firewall is entirely blocking database connections.");
+            }
+        }
+    }, 5000); // 500ms interval polling rate
 }
 
 async function setupChatRoom() {
@@ -40,7 +48,9 @@ async function setupChatRoom() {
     }, { onConflict: 'room,name' });
 
     setInterval(async () => {
-        await supabaseClient.from('user_status').update({ last_active: Date.now() }).eq('room', currentRoom).eq('name', username);
+        if (supabaseClient) {
+            await supabaseClient.from('user_status').update({ last_active: Date.now() }).eq('room', currentRoom).eq('name', username);
+        }
     }, 5000);
 
     const { data: messages } = await supabaseClient.from('chat_messages').select('*').eq('room', currentRoom).order('id', { ascending: true });
@@ -73,6 +83,7 @@ function appendMessage(msg) {
 }
 
 async function updateStatusDisplay() {
+    if (!supabaseClient) return;
     const { data: users } = await supabaseClient.from('user_status').select('*').eq('room', currentRoom);
     if (!users) return;
 
