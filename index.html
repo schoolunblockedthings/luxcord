@@ -3,35 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supabase Real-Time Chat</title>
+    <title>Join Private Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Login Screen -->
-    <div id="auth-screen" class="screen">
+    <div class="screen">
         <h2>Join Private Chat</h2>
         <input type="text" id="username-input" placeholder="Enter Username">
         <input type="text" id="room-input" placeholder="Enter Room Code">
         <button id="join-btn">Join Chat</button>
     </div>
 
-    <!-- Chat Screen -->
-    <div id="chat-screen" class="screen hidden">
-        <div class="chat-header">
-            <span id="room-display">Room: </span>
-            <button id="leave-btn">Leave</button>
-        </div>
-        <div id="chat-display"></div>
-        <div id="typing-label"></div>
-        <div class="chat-footer">
-            <input type="text" id="message-input" placeholder="Type a message..." maxlength="100">
-            <span id="char-counter">0/100</span>
-            <button id="send-btn">Send</button>
-        </div>
-    </div>
-
-    <!-- FIXED: Added the correct official Supabase JS library link -->
     <script src="https://jsdelivr.net"></script>
-    <script src="script.js"></script>
+    <script>
+        // Paste your Supabase credentials here too
+        const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        document.getElementById("join-btn").addEventListener("click", async () => {
+            const username = document.getElementById("username-input").value.trim();
+            const room = document.getElementById("room-input").value.trim();
+
+            if (!username || !room) {
+                alert("Please fill in both fields!");
+                return;
+            }
+
+            const now = Date.now();
+            const { data: users } = await supabaseClient
+                .from('user_status')
+                .select('*')
+                .eq('room', room)
+                .eq('name', username);
+
+            if (users && users.length > 0 && (now - users[0].last_active < 15000)) {
+                alert("Username already active in this room!");
+                return;
+            }
+
+            // Redirects to chat.html and attaches your setup to the URL bar
+            window.location.href = `chat.html?name=${encodeURIComponent(username)}&room=${encodeURIComponent(room)}`;
+        });
+    </script>
 </body>
 </html>
