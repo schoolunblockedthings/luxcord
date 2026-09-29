@@ -1,46 +1,26 @@
 const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
-// FIXED: Changed variable name to supabaseClient to prevent the initialization crash
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let username = "";
-let currentRoom = "";
+// Grabs the username and room code directly out of the URL bar parameters
+const urlParams = new URLSearchParams(window.location.search);
+const username = urlParams.get('name');
+const currentRoom = urlParams.get('room');
+
 let audio = new Audio("https://code.org");
 
-const authScreen = document.getElementById("auth-screen");
-const chatScreen = document.getElementById("chat-screen");
-const usernameInput = document.getElementById("username-input");
-const roomInput = document.getElementById("room-input");
 const chatDisplay = document.getElementById("chat-display");
 const messageInput = document.getElementById("message-input");
 const typingLabel = document.getElementById("typing-label");
 const charCounter = document.getElementById("char-counter");
 
-document.getElementById("join-btn").addEventListener("click", async () => {
-    username = usernameInput.value.trim();
-    currentRoom = roomInput.value.trim();
-
-    if (!username || !currentRoom) return;
-
-    const now = Date.now();
-    const { data: users, error } = await supabaseClient
-        .from('user_status')
-        .select('*')
-        .eq('room', currentRoom)
-        .eq('name', username);
-
-    if (users && users.length > 0 && (now - users[0].last_active < 15000)) {
-        alert("Username already active in this room!");
-        return;
-    }
-
-    authScreen.classList.add("hidden");
-    chatScreen.classList.remove("hidden");
+if (!username || !currentRoom) {
+    window.location.href = "index.html";
+} else {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
-
     setupChatRoom();
-});
+}
 
 async function setupChatRoom() {
     const now = Date.now();
@@ -138,5 +118,5 @@ async function sendMessage() {
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
     await supabaseClient.from('user_status').delete().eq('room', currentRoom).eq('name', username);
-    window.location.reload();
+    window.location.href = "index.html";
 });
