@@ -143,10 +143,13 @@ async function sendMessage() {
             body: JSON.stringify({ is_typing: false })
         });
 
-        // Post new message row
+        // FIXED: Added 'Prefer': 'return=representation' to force Supabase to instantly return the text payload
         await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
             method: 'POST',
-            headers: headers,
+            headers: {
+                ...headers,
+                'Prefer': 'return=representation'
+            },
             body: JSON.stringify({
                 room: currentRoom,
                 name: username,
@@ -154,11 +157,13 @@ async function sendMessage() {
             })
         });
 
+        // Instantly force a manual redraw of the screen logs
         refreshChatData();
     } catch (err) {
         console.error("Failed to transmit text: ", err);
     }
 }
+
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
     try {
