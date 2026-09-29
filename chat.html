@@ -15,13 +15,14 @@
         <div id="chat-display"></div>
         <div id="typing-label"></div>
         <div class="chat-footer">
-            <input type="text" id="message-input" placeholder="Type a message..." maxlength="100">
+            <!-- FIXED: Increased maxlength to 1000 -->
+            <input type="text" id="message-input" placeholder="Type a message..." maxlength="1000">
+            <!-- FIXED: Changed default display limit text -->
             <span id="char-counter">0/1000</span>
             <button id="send-btn">Send</button>
         </div>
     </div>
 
-    <!-- No external CDNs are needed here anymore! -->
     <script src="/script.js"></script>
 </body>
 </html>
