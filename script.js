@@ -29,7 +29,7 @@ async function refreshChatData() {
     };
 
     try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/user_status`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/user_status`, {
             method: 'POST',
             headers: {
                 ...headers,
@@ -50,6 +50,13 @@ async function refreshChatData() {
             method: 'GET',
             headers: headers
         });
+        
+        if (!msgResponse.ok) {
+            const errText = await msgResponse.text();
+            alert("Database Error loading messages: " + errText);
+            return;
+        }
+
         const messages = await msgResponse.json();
         
         if (messages && messages.length !== lastMessageCount) {
@@ -65,7 +72,9 @@ async function refreshChatData() {
             }
             lastMessageCount = messages.length;
         }
-    } catch (err) {}
+    } catch (err) {
+        alert("Fetch exception: " + err.message);
+    }
 
     try {
         const statusResponse = await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}`, {
@@ -93,7 +102,6 @@ async function refreshChatData() {
 }
 
 messageInput.addEventListener("input", async () => {
-    // FIXED: Updated character counter text layout to reflect 1000 max limit
     charCounter.innerText = `${messageInput.value.length}/1000`;
     try {
         await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
@@ -121,7 +129,6 @@ async function sendMessage() {
     if (!text) return;
 
     messageInput.value = "";
-    // FIXED: Reset to 1000 limit display text
     charCounter.innerText = "0/1000";
 
     const headers = {
@@ -137,7 +144,8 @@ async function sendMessage() {
             body: JSON.stringify({ is_typing: false })
         });
 
-        await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
+        // ENABLED ERROR ALERTS HERE
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
             method: 'POST',
             headers: {
                 ...headers,
@@ -150,8 +158,15 @@ async function sendMessage() {
             })
         });
 
-        setTimeout(refreshChatData, 300);
-    } catch (err) {}
+        if (!response.ok) {
+            const errData = await response.text();
+            alert("Database Error sending message:\n" + errData);
+        } else {
+            setTimeout(refreshChatData, 300);
+        }
+    } catch (err) {
+        alert("Network Send Exception: " + err.message);
+    }
 }
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
