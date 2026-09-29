@@ -14,15 +14,9 @@
         <button id="join-btn">Join Chat</button>
     </div>
 
-    <!-- FIXED: Swapped to unpkg CDN which safely bypasses jsDelivr filters -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
         const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
-        
-        // FIXED: Deconstruct createClient to ensure error-free initialization on any platform
-        const { createClient } = window.supabase;
-        const chatDb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
         document.getElementById("join-btn").addEventListener("click", async () => {
             const username = document.getElementById("username-input").value.trim();
@@ -34,26 +28,27 @@
             }
 
             try {
+                // Check if username is taken using native fetch
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(room)}&name=eq.${encodeURIComponent(username)}`, {
+                    method: 'GET',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`
+                    }
+                });
+                
+                const users = await response.json();
                 const now = Date.now();
-                const { data: users, error } = await chatDb
-                    .from('user_status')
-                    .select('*')
-                    .eq('room', room)
-                    .eq('name', username);
 
-                if (error) {
-                    alert("Database Error: " + error.message);
-                    return;
-                }
-
-                if (users && users.length > 0 && (now - users.last_active < 15000)) {
+                if (users && users.length > 0 && (now - users[0].last_active < 15000)) {
                     alert("Username already active in this room!");
                     return;
                 }
 
                 window.location.href = `./chat.html?name=${encodeURIComponent(username)}&room=${encodeURIComponent(room)}`;
             } catch (err) {
-                alert("JavaScript Error: " + err.message);
+                alert("Connection failed. Make sure your Supabase RLS is turned off!");
+                console.error(err);
             }
         });
     </script>
