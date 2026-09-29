@@ -18,22 +18,20 @@ if (!username || !currentRoom) {
 } else {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
     
-    // Run the initial data fetch immediately
     refreshChatData();
-    
-    // Loop every 3 seconds to fetch new messages and update typing indicators
-    setInterval(refreshChatData, 3000);
+    setInterval(refreshChatData, 4000); // 4 seconds to be safe with network speeds
 }
 
 async function refreshChatData() {
-    try {
-        const headers = {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`
-        };
+    const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+    };
 
-        // 1. Update our own online timestamp heartbeat
-        await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
+    // STEP 1: Heartbeat
+    try {
+        // FIXED: Removed query strings from POST url which causes errors in Supabase API
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/user_status`, {
             method: 'POST',
             headers: {
                 ...headers,
@@ -47,12 +45,24 @@ async function refreshChatData() {
                 typing_timestamp: Date.now()
             })
         });
+        if (!res.ok) console.log("Heartbeat status code: " + res.status);
+    } catch (err) {
+        console.error("Heartbeat fail: ", err);
+    }
 
-        // 2. Fetch all messages for the current room
+    // STEP 2: Fetch Messages
+    try {
         const msgResponse = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages?room=eq.${encodeURIComponent(currentRoom)}&order=id.asc`, {
             method: 'GET',
             headers: headers
         });
+        
+        if (!msgResponse.ok) {
+            const errText = await msgResponse.text();
+            alert("Failed to load messages from database: " + errText);
+            return;
+        }
+
         const messages = await msgResponse.json();
         
         if (messages && messages.length !== lastMessageCount) {
@@ -63,24 +73,26 @@ async function refreshChatData() {
             });
             chatDisplay.scrollTop = chatDisplay.scrollHeight;
             
-            // Play sound if a new message arrives from a friend
             if (lastMessageCount > 0 && messages[messages.length - 1].name !== username) {
                 audio.play().catch(() => {});
             }
             lastMessageCount = messages.length;
         }
+    } catch (err) {
+        alert("Message Fetch Exception: " + err.message);
+    }
 
-        // 3. Fetch all active typing statuses
+    // STEP 3: Fetch Typing Users
+    try {
         const statusResponse = await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}`, {
             method: 'GET',
             headers: headers
         });
-        const users = await statusResponse.json();
-        
-        let typers = [];
-        const now = Date.now();
-        
-        if (users) {
+        if (statusResponse.ok) {
+            const users = await statusResponse.json();
+            let typers = [];
+            const now = Date.now();
+            
             users.forEach(u => {
                 if (u.name !== username) {
                     const isOnline = (now - u.last_active < 15000);
@@ -91,30 +103,27 @@ async function refreshChatData() {
                     }
                 }
             });
+            typingLabel.innerText = typers.join("\n");
         }
-        typingLabel.innerText = typers.join("\n");
-
-    } catch (err) {
-        console.error("Error syncing data loop: ", err);
-    }
+    } catch (e) {}
 }
 
-// Handle typing inputs
 messageInput.addEventListener("input", async () => {
     charCounter.innerText = `${messageInput.value.length}/100`;
-    
-    await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
-        method: 'PATCH',
-        headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            is_typing: true,
-            typing_timestamp: Date.now()
-        })
-    });
+    try {
+        await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                is_typing: true,
+                typing_timestamp: Date.now()
+            })
+        });
+    } catch(e){}
 });
 
 messageInput.addEventListener("keydown", (e) => {
@@ -136,15 +145,13 @@ async function sendMessage() {
     };
 
     try {
-        // Turn typing status off
         await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
             method: 'PATCH',
             headers: headers,
             body: JSON.stringify({ is_typing: false })
         });
 
-        // FIXED: Added 'Prefer': 'return=representation' to force Supabase to instantly return the text payload
-        await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
             method: 'POST',
             headers: {
                 ...headers,
@@ -157,13 +164,16 @@ async function sendMessage() {
             })
         });
 
-        // Instantly force a manual redraw of the screen logs
-        refreshChatData();
+        if (!response.ok) {
+            const errData = await response.text();
+            alert("Database rejected your message submission:\n" + errData);
+        } else {
+            setTimeout(refreshChatData, 300); // Give the database a moment to register before redrawing
+        }
     } catch (err) {
-        console.error("Failed to transmit text: ", err);
+        alert("Network Send Error: " + err.message);
     }
 }
-
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
     try {
