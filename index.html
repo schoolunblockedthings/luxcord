@@ -1,56 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Join Private Chat</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="screen">
-        <h2>Join Private Chat</h2>
-        <input type="text" id="username-input" placeholder="Enter Username">
-        <input type="text" id="room-input" placeholder="Enter Room Code">
-        <button id="join-btn">Join Chat</button>
-    </div>
-
-    <script>
-        const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
-
-        document.getElementById("join-btn").addEventListener("click", async () => {
-            const username = document.getElementById("username-input").value.trim();
-            const room = document.getElementById("room-input").value.trim();
-
-            if (!username || !room) {
-                alert("Please fill in both fields!");
-                return;
-            }
-
-            try {
-                // Check if username is taken using native fetch
-                const response = await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(room)}&name=eq.${encodeURIComponent(username)}`, {
-                    method: 'GET',
-                    headers: {
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': `Bearer ${SUPABASE_KEY}`
-                    }
-                });
-                
-                const users = await response.json();
-                const now = Date.now();
-
-                if (users && users.length > 0 && (now - users[0].last_active < 15000)) {
-                    alert("Username already active in this room!");
-                    return;
-                }
-
-                window.location.href = `./chat.html?name=${encodeURIComponent(username)}&room=${encodeURIComponent(room)}`;
-            } catch (err) {
-                alert("Connection failed. Make sure your Supabase RLS is turned off!");
-                console.error(err);
-            }
-        });
-    </script>
-</body>
-</html>
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Luxcord</title><link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head><body class="landing">
+<main class="auth-card">
+  <div class="brand"><span>✦</span><div><h1>Luxcord</h1><p>Chat. Connect. Stay close.</p></div></div>
+  <div id="auth-tabs"><button class="tab active" data-mode="login">Log in</button><button class="tab" data-mode="signup">Create account</button></div>
+  <form id="auth-form">
+    <label>Email<input id="email" type="email" required autocomplete="email"></label>
+    <label>Password<input id="password" type="password" required minlength="6" autocomplete="current-password"></label>
+    <label id="username-wrap" class="hidden">Username<input id="username" maxlength="32" autocomplete="username"></label>
+    <button class="primary wide" type="submit" id="auth-submit">Log in</button>
+    <p id="auth-error" class="error"></p>
+  </form>
+  <div class="guest-box"><span>Want to try the old room chat?</span><button id="guest-btn" class="secondary">Join as guest</button></div>
+</main>
+<div id="guest-modal" class="modal hidden"><div class="modal-card"><button class="x" data-close>×</button><h2>Join a room</h2><label>Username<input id="guest-name" maxlength="32"></label><label>Room code<input id="guest-room" maxlength="64"></label><button id="guest-join" class="primary wide">Join room</button></div></div>
+<script>
+const SUPABASE_URL="https://mvgqpkdldciwzqgpayoo.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsY2Npd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);let mode="login";
+(async()=>{const s=await sb.auth.getSession();if(s.data.session)location.href="chat.html"})();
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById("username-wrap").classList.toggle("hidden",mode!=="signup");document.getElementById("auth-submit").textContent=mode==="signup"?"Create account":"Log in";document.getElementById("auth-error").textContent=""});
+document.getElementById("auth-form").onsubmit=async e=>{e.preventDefault();const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;let r;if(mode==="signup"){const username=document.getElementById("username").value.trim();if(!username)return; r=await sb.auth.signUp({email,password,options:{data:{username}}});if(!r.error&&!r.data.session)document.getElementById("auth-error").textContent="Account created. Check your email to confirm it."; }else r=await sb.auth.signInWithPassword({email,password});if(r.error)document.getElementById("auth-error").textContent=r.error.message;else if(r.data.session)location.href="chat.html"};
+document.getElementById("guest-btn").onclick=()=>document.getElementById("guest-modal").classList.remove("hidden");
+document.querySelector("[data-close]").onclick=()=>document.getElementById("guest-modal").classList.add("hidden");
+document.getElementById("guest-join").onclick=()=>{const n=document.getElementById("guest-name").value.trim(),r=document.getElementById("guest-room").value.trim();if(n&&r)location.href="chat.html?name="+encodeURIComponent(n)+"&room="+encodeURIComponent(r)};
+</script></body></html>
