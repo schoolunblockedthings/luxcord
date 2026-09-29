@@ -1897,6 +1897,20 @@ setInterval(() => {
 
 
 // =============================
+// DM LIVE FALLBACK
+// =============================
+
+setInterval(() => {
+    if (
+        session &&
+        dm &&
+        !$("dms-view")?.classList.contains("hidden")
+    ) {
+        refreshDM();
+    }
+}, 2000);
+
+// =============================
 // START
 // =============================
 
