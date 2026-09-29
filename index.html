@@ -14,12 +14,14 @@
         <button id="join-btn">Join Chat</button>
     </div>
 
+    <!-- Official Supabase JS Client CDN -->
     <script src="https://jsdelivr.net"></script>
     <script>
-        // Paste your Supabase credentials here too
         const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // Use window.supabase to grab it straight from the CDN header safely
+        const chatDb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         document.getElementById("join-btn").addEventListener("click", async () => {
             const username = document.getElementById("username-input").value.trim();
@@ -30,21 +32,31 @@
                 return;
             }
 
-            const now = Date.now();
-            const { data: users } = await supabaseClient
-                .from('user_status')
-                .select('*')
-                .eq('room', room)
-                .eq('name', username);
+            // FORCE AN ACTIVE ERROR MESSAGE SO WE SEE WHAT IS WRONG
+            try {
+                const now = Date.now();
+                const { data: users, error } = await chatDb
+                    .from('user_status')
+                    .select('*')
+                    .eq('room', room)
+                    .eq('name', username);
 
-            if (users && users.length > 0 && (now - users[0].last_active < 15000)) {
-                alert("Username already active in this room!");
-                return;
+                if (error) {
+                    alert("Database Error: " + error.message + "\nDetails: " + error.details);
+                    console.error(error);
+                    return;
+                }
+
+                if (users && users.length > 0 && (now - users[0].last_active < 15000)) {
+                    alert("Username already active in this room!");
+                    return;
+                }
+
+                window.location.href = `./chat.html?name=${encodeURIComponent(username)}&room=${encodeURIComponent(room)}`;
+            } catch (err) {
+                alert("JavaScript Exception: " + err.message);
+                console.error(err);
             }
-
-            // Redirects to chat.html and attaches your setup to the URL bar
-            window.location.href = `./chat?name=${encodeURIComponent(username)}&room=${encodeURIComponent(room)}`;
-
         });
     </script>
 </body>
