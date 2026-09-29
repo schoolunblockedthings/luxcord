@@ -136,7 +136,7 @@ async function sendMessage() {
     if (!text) return;
 
     messageInput.value = "";
-    charCounter.innerText = "0/100";
+    charCounter.innerText = "0/1000";
 
     const headers = {
         'apikey': SUPABASE_KEY,
