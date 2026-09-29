@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Room</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div class="screen">
@@ -21,8 +21,24 @@
         </div>
     </div>
 
-    <!-- FIXED: Replaced the broken link with the working network-bypass script -->
-    <script src="https://unpkg.com"></script>
-    <script src="script.js"></script>
+    <!-- Smart Fallback CDN Layer -->
+    <script src="https://cloudflare.com"></script>
+    <script>
+        // If Cloudflare fails, dynamically try loading via unpkg's full direct bundle paths
+        if (!window.supabase) {
+            console.log("Cloudflare blocked, trying Unpkg...");
+            document.write('<script src="https://unpkg.com"><\/script>');
+        }
+    </script>
+    <script>
+        // Final ultimate backup using modern browser module fetching if both traditional routes fail
+        if (!window.supabase) {
+            console.log("Unpkg blocked, trying Skypack module fallback...");
+            document.write('<script src="https://skypack.dev"><\/script>');
+        }
+    </script>
+
+    <!-- Load your custom chat code last -->
+    <script src="/script.js"></script>
 </body>
 </html>
