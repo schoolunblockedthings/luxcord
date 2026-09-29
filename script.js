@@ -1,4 +1,4 @@
-const SUPABASE_URL="https://mvgqpkdldciwzqgpayoo.supabase.co",SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsY2l3enFn cHBheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08".replace(/ /g,""),sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY),$=id=>document.getElementById(id),p=new URLSearchParams(location.search);
+const SUPABASE_URL="https://mvgqpkdldciwzqgpayoo.supabase.co",SUPABASE_KEY="sb_publishable__YusW9lo6b59V8pRXUXIEw_0Ejsw6B4".replace(/ /g,""),sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY),$=id=>document.getElementById(id),p=new URLSearchParams(location.search);
 let session=null,me=null,room=p.get("room"),reply=null,dm=null,settings={sound:true,notifications:true,enter_send:true,theme:"dark"};
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const open=id=>$(id)?.classList.remove("hidden"),close=id=>$(id)?.classList.add("hidden");
