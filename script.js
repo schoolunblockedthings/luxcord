@@ -1243,73 +1243,66 @@ async function loadDMs() {
         .or(
             `requester.eq.${session.user.id},addressee.eq.${session.user.id}`
         )
-        .eq(
-            "status",
-            "accepted"
-        );
+        .eq("status", "accepted");
 
-    const ids =
-        (result.data || [])
-            .map(
-                (friendship) =>
-                    friendship.requester ===
-                    session.user.id
-                        ? friendship.addressee
-                        : friendship.requester
-            );
+    const ids = [
+        ...(result.data || []).map((friendship) =>
+            friendship.requester === session.user.id
+                ? friendship.addressee
+                : friendship.requester
+        )
+    ];
 
     let profiles = [];
 
     if (ids.length) {
-        const profileResult =
-            await sb
-                .from("profiles")
-                .select(
-                    "id,username,display_name"
-                )
-                .in("id", ids);
+        const profileResult = await sb
+            .from("profiles")
+            .select("id,username,display_name")
+            .in("id", ids);
 
-        profiles =
-            profileResult.data || [];
+        profiles = profileResult.data || [];
     }
+
+    const dmListHTML =
+        profiles
+            .map((profile) => {
+                const name =
+                    profile.display_name ||
+                    profile.username ||
+                    "User";
+
+                return `
+                    <div
+                        class="side-item"
+                        onclick="openDM('${profile.id}')"
+                    >
+                        <div class="avatar">
+                            ${esc(name[0]?.toUpperCase() || "?")}
+                        </div>
+
+                        ${esc(name)}
+                    </div>
+                `;
+            })
+            .join("") ||
+        `
+            <div
+                class="muted"
+                style="padding:10px"
+            >
+                Add friends to start DMs.
+            </div>
+        `;
 
     if ($("dm-people")) {
-        $("dm-people").innerHTML =
-            profiles
-                .map(
-                    (profile) => `
-                        <div
-                            class="side-item"
-                            onclick="openDM('${profile.id}')"
-                        >
-                            <div class="avatar">
-                                ${esc(
-                                    (
-                                        profile.display_name ||
-                                        profile.username
-                                    )[0]
-                                )}
-                            </div>
+        $("dm-people").innerHTML = dmListHTML;
+    }
 
-                            ${esc(
-                                profile.display_name ||
-                                profile.username
-                            )}
-                        </div>
-                    `
-                )
-                .join("") ||
-            `
-                <div
-                    class="muted"
-                    style="padding:10px"
-                >
-                    Add friends to start DMs.
-                </div>
-            `;
+    if ($("dm-people-main")) {
+        $("dm-people-main").innerHTML = dmListHTML;
     }
 }
-
 
 window.openDM = async function (id) {
     if (!session) {
@@ -1356,132 +1349,160 @@ window.openDM = async function (id) {
 };
 
 
+let dmRefreshing = false;
+
 async function refreshDM() {
-    if (!dm) {
+    if (!dm || !session || dmRefreshing) {
         return;
     }
 
-    const result = await sb
-        .from("dm_messages")
-        .select("*")
-        .eq(
-            "conversation_id",
-            dm.id
-        )
-        .order("created_at");
+    dmRefreshing = true;
 
-    const messages =
-        result.data || [];
+    try {
+        const result = await sb
+            .from("dm_messages")
+            .select("*")
+            .eq("conversation_id", dm.id)
+            .order("created_at", {
+                ascending: true
+            });
 
-    const ids = [
-        ...new Set(
-            messages.map(
-                (message) =>
-                    message.sender_id
+        if (result.error) {
+            console.error(
+                "DM message load error:",
+                result.error
+            );
+
+            return;
+        }
+
+        const messages = result.data || [];
+
+        const ids = [
+            ...new Set(
+                messages.map(
+                    (message) =>
+                        message.sender_id
+                )
             )
-        )
-    ];
+        ];
 
-    let profiles = [];
+        let profiles = [];
 
-    if (ids.length) {
-        const profileResult =
-            await sb
+        if (ids.length) {
+            const profileResult = await sb
                 .from("profiles")
                 .select(
                     "id,username,display_name"
                 )
                 .in("id", ids);
 
-        profiles =
-            profileResult.data || [];
-    }
+            profiles =
+                profileResult.data || [];
+        }
 
-    const profileMap =
-        Object.fromEntries(
-            profiles.map(
-                (profile) => [
-                    profile.id,
-                    profile
-                ]
-            )
-        );
+        const profileMap =
+            Object.fromEntries(
+                profiles.map(
+                    (profile) => [
+                        profile.id,
+                        profile
+                    ]
+                )
+            );
 
-    if (!$("dm-messages")) {
-        return;
-    }
+        const container =
+            $("dm-messages");
 
-    $("dm-messages").innerHTML =
-        messages
-            .map((message) => {
-                const user =
-                    profileMap[
-                        message.sender_id
-                    ] || {};
+        if (!container) {
+            return;
+        }
 
-                const name =
-                    user.display_name ||
-                    user.username ||
-                    "User";
+        const wasNearBottom =
+            container.scrollHeight -
+                container.scrollTop -
+                container.clientHeight <
+            150;
 
-                return `
-                    <article class="message">
+        container.innerHTML =
+            messages
+                .map((message) => {
+                    const user =
+                        profileMap[
+                            message.sender_id
+                        ] || {};
 
-                        <div class="message-avatar">
-                            ${esc(name[0])}
-                        </div>
+                    const name =
+                        user.display_name ||
+                        user.username ||
+                        "User";
 
-                        <div class="message-body">
+                    return `
+                        <article class="message">
 
-                            <div class="message-head">
-                                <b>
-                                    ${esc(name)}
-                                </b>
-
-                                <time>
-                                    ${new Date(
-                                        message.created_at
-                                    ).toLocaleTimeString(
-                                        [],
-                                        {
-                                            hour: "2-digit",
-                                            minute: "2-digit"
-                                        }
-                                    )}
-                                </time>
-                            </div>
-
-                            <div class="message-text">
+                            <div class="message-avatar">
                                 ${esc(
-                                    message.message
+                                    name[0]?.toUpperCase() ||
+                                    "?"
                                 )}
                             </div>
 
-                            <div class="message-actions">
+                            <div class="message-body">
 
-                                <button
-                                    onclick="reactDM(${message.id}, '❤️')"
-                                >
-                                    ❤️
-                                </button>
+                                <div class="message-head">
+                                    <b>
+                                        ${esc(name)}
+                                    </b>
 
-                                <button
-                                    onclick="reactDM(${message.id}, '👍')"
-                                >
-                                    👍
-                                </button>
+                                    <time>
+                                        ${new Date(
+                                            message.created_at
+                                        ).toLocaleTimeString(
+                                            [],
+                                            {
+                                                hour: "2-digit",
+                                                minute: "2-digit"
+                                            }
+                                        )}
+                                    </time>
+                                </div>
+
+                                <div class="message-text">
+                                    ${esc(
+                                        message.message
+                                    )}
+                                </div>
+
+                                <div class="message-actions">
+
+                                    <button
+                                        onclick="reactDM(${message.id}, '❤️')"
+                                    >
+                                        ❤️
+                                    </button>
+
+                                    <button
+                                        onclick="reactDM(${message.id}, '👍')"
+                                    >
+                                        👍
+                                    </button>
+
+                                </div>
 
                             </div>
 
-                        </div>
+                        </article>
+                    `;
+                })
+                .join("");
 
-                    </article>
-                `;
-            })
-            .join("");
-
-    $("dm-messages").scrollTop =
-        $("dm-messages").scrollHeight;
+        if (wasNearBottom || messages.length <= 1) {
+            container.scrollTop =
+                container.scrollHeight;
+        }
+    } finally {
+        dmRefreshing = false;
+    }
 }
 
 
@@ -1737,13 +1758,23 @@ async function saveSettings() {
 // REALTIME
 // =============================
 
+let realtimeChannel = null;
+
 function setupRealtime() {
     if (!session) {
         return;
     }
 
-    sb.channel("luxcord-live")
+    if (realtimeChannel) {
+        sb.removeChannel(realtimeChannel);
+    }
 
+    realtimeChannel = sb
+        .channel(
+            `luxcord-live-${session.user.id}`
+        )
+
+        // ROOM MESSAGES
         .on(
             "postgres_changes",
             {
@@ -1752,12 +1783,38 @@ function setupRealtime() {
                 table: "chat_messages"
             },
             (payload) => {
+                const changedRoom =
+                    payload.new?.room ||
+                    payload.old?.room;
+
                 if (
                     room &&
-                    payload.new?.room ===
-                        room
+                    String(changedRoom) ===
+                        String(room)
                 ) {
                     refreshRoom();
+                }
+            }
+        )
+
+        // DIRECT MESSAGES
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "dm_messages"
+            },
+            (payload) => {
+                const conversationId =
+                    payload.new?.conversation_id;
+
+                if (
+                    dm &&
+                    String(conversationId) ===
+                        String(dm.id)
+                ) {
+                    refreshDM();
                 }
             }
         )
@@ -1765,22 +1822,47 @@ function setupRealtime() {
         .on(
             "postgres_changes",
             {
-                event: "*",
+                event: "UPDATE",
                 schema: "public",
                 table: "dm_messages"
             },
             (payload) => {
+                const conversationId =
+                    payload.new?.conversation_id ||
+                    payload.old?.conversation_id;
+
                 if (
                     dm &&
-                    payload.new
-                        ?.conversation_id ===
-                        dm.id
+                    String(conversationId) ===
+                        String(dm.id)
                 ) {
                     refreshDM();
                 }
             }
         )
 
+        .on(
+            "postgres_changes",
+            {
+                event: "DELETE",
+                schema: "public",
+                table: "dm_messages"
+            },
+            (payload) => {
+                const conversationId =
+                    payload.old?.conversation_id;
+
+                if (
+                    dm &&
+                    String(conversationId) ===
+                        String(dm.id)
+                ) {
+                    refreshDM();
+                }
+            }
+        )
+
+        // NOTIFICATIONS
         .on(
             "postgres_changes",
             {
@@ -1795,9 +1877,13 @@ function setupRealtime() {
             }
         )
 
-        .subscribe();
+        .subscribe((status) => {
+            console.log(
+                "Luxcord realtime:",
+                status
+            );
+        });
 }
-
 
 // =============================
 // PRESENCE REFRESH
