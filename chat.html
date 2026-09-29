@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Room</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="screen">
+        <div class="chat-header">
+            <span id="room-display">Room: </span>
+            <button id="leave-btn">Leave</button>
+        </div>
+        <div id="chat-display"></div>
+        <div id="typing-label"></div>
+        <div class="chat-footer">
+            <input type="text" id="message-input" placeholder="Type a message..." maxlength="100">
+            <span id="char-counter">0/100</span>
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script src="https://jsdelivr.net"></script>
+    <script src="script.js"></script>
+</body>
+</html>
