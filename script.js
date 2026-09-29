@@ -1,8 +1,8 @@
 const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
-// FIXED: Correct initialization for the Supabase CDN library
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// FIXED: Changed variable name to supabaseClient to prevent the initialization crash
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let username = "";
 let currentRoom = "";
@@ -24,7 +24,7 @@ document.getElementById("join-btn").addEventListener("click", async () => {
     if (!username || !currentRoom) return;
 
     const now = Date.now();
-    const { data: users, error } = await supabase
+    const { data: users, error } = await supabaseClient
         .from('user_status')
         .select('*')
         .eq('room', currentRoom)
@@ -45,7 +45,7 @@ document.getElementById("join-btn").addEventListener("click", async () => {
 async function setupChatRoom() {
     const now = Date.now();
 
-    await supabase.from('user_status').upsert({
+    await supabaseClient.from('user_status').upsert({
         room: currentRoom,
         name: username,
         last_active: now,
@@ -54,15 +54,15 @@ async function setupChatRoom() {
     }, { onConflict: 'room,name' });
 
     setInterval(async () => {
-        await supabase.from('user_status').update({ last_active: Date.now() }).eq('room', currentRoom).eq('name', username);
+        await supabaseClient.from('user_status').update({ last_active: Date.now() }).eq('room', currentRoom).eq('name', username);
     }, 5000);
 
-    const { data: messages } = await supabase.from('chat_messages').select('*').eq('room', currentRoom).order('id', { ascending: true });
+    const { data: messages } = await supabaseClient.from('chat_messages').select('*').eq('room', currentRoom).order('id', { ascending: true });
     if (messages) {
         messages.forEach(msg => appendMessage(msg));
     }
 
-    supabase.channel('messages-channel')
+    supabaseClient.channel('messages-channel')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room=eq.${currentRoom}` }, payload => {
             appendMessage(payload.new);
             if (payload.new.name !== username) {
@@ -71,7 +71,7 @@ async function setupChatRoom() {
         })
         .subscribe();
 
-    supabase.channel('status-channel')
+    supabaseClient.channel('status-channel')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'user_status', filter: `room=eq.${currentRoom}` }, () => {
             updateStatusDisplay();
         })
@@ -87,7 +87,7 @@ function appendMessage(msg) {
 }
 
 async function updateStatusDisplay() {
-    const { data: users } = await supabase.from('user_status').select('*').eq('room', currentRoom);
+    const { data: users } = await supabaseClient.from('user_status').select('*').eq('room', currentRoom);
     if (!users) return;
 
     let typers = [];
@@ -109,7 +109,7 @@ async function updateStatusDisplay() {
 
 messageInput.addEventListener("input", async () => {
     charCounter.innerText = `${messageInput.value.length}/100`;
-    await supabase.from('user_status').update({
+    await supabaseClient.from('user_status').update({
         is_typing: true,
         typing_timestamp: Date.now()
     }).eq('room', currentRoom).eq('name', username);
@@ -127,9 +127,9 @@ async function sendMessage() {
     messageInput.value = "";
     charCounter.innerText = "0/100";
 
-    await supabase.from('user_status').update({ is_typing: false }).eq('room', currentRoom).eq('name', username);
+    await supabaseClient.from('user_status').update({ is_typing: false }).eq('room', currentRoom).eq('name', username);
 
-    await supabase.from('chat_messages').insert({
+    await supabaseClient.from('chat_messages').insert({
         room: currentRoom,
         name: username,
         message: text
@@ -137,6 +137,6 @@ async function sendMessage() {
 }
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
-    await supabase.from('user_status').delete().eq('room', currentRoom).eq('name', username);
+    await supabaseClient.from('user_status').delete().eq('room', currentRoom).eq('name', username);
     window.location.reload();
 });
