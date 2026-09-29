@@ -1,4 +1,4 @@
-const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
+const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
 let supabaseClient = null;
@@ -18,8 +18,8 @@ if (!username || !currentRoom) {
 } else {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
     
-    // FIXED: Instead of crashing instantly, it polls every 500ms to wait for Supabase to be ready
     let checkCount = 0;
+    // FIXED: Changed interval time from 5000ms to 200ms for instant loading
     const libraryLoader = setInterval(() => {
         if (window.supabase) {
             clearInterval(libraryLoader);
@@ -27,13 +27,12 @@ if (!username || !currentRoom) {
             setupChatRoom();
         } else {
             checkCount++;
-            // If it takes more than 5 seconds (10 checks), then assume it is truly blocked by the network
-            if (checkCount > 10) {
+            if (checkCount > 25) { // 25 checks at 200ms = 5 seconds total wait time
                 clearInterval(libraryLoader);
                 alert("Critical Error: None of the backup network servers responded. The network firewall is entirely blocking database connections.");
             }
         }
-    }, 5000); // 500ms interval polling rate
+    }, 200); 
 }
 
 async function setupChatRoom() {
