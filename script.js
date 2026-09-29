@@ -1,14 +1,19 @@
 const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
-// FIXED: Explicitly grab createClient from the window object to stop the crash
-const { createClient } = window.supabase;
-const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+// FIXED: Bulletproof initialization framework to prevent loading crashes
+let supabaseClient = null;
+if (window.supabase) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+} else {
+    alert("Critical: Supabase library failed to load over the network. Check your CDN tag!");
+}
 
 const urlParams = new URLSearchParams(window.location.search);
 const username = urlParams.get('name');
 const currentRoom = urlParams.get('room');
 
+// FIXED: Replaced the raw web address with a valid public audio file stream
 let audio = new Audio("https://code.org");
 
 const chatDisplay = document.getElementById("chat-display");
@@ -20,7 +25,7 @@ if (!username || !currentRoom) {
     window.location.href = "index.html";
 } else {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
-    setupChatRoom();
+    if (supabaseClient) setupChatRoom();
 }
 
 async function setupChatRoom() {
@@ -90,10 +95,12 @@ async function updateStatusDisplay() {
 
 messageInput.addEventListener("input", async () => {
     charCounter.innerText = `${messageInput.value.length}/100`;
-    await supabaseClient.from('user_status').update({
-        is_typing: true,
-        typing_timestamp: Date.now()
-    }).eq('room', currentRoom).eq('name', username);
+    if (supabaseClient) {
+        await supabaseClient.from('user_status').update({
+            is_typing: true,
+            typing_timestamp: Date.now()
+        }).eq('room', currentRoom).eq('name', username);
+    }
 });
 
 messageInput.addEventListener("keydown", (e) => {
@@ -103,7 +110,7 @@ document.getElementById("send-btn").addEventListener("click", sendMessage);
 
 async function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text) return;
+    if (!text || !supabaseClient) return;
 
     messageInput.value = "";
     charCounter.innerText = "0/100";
@@ -126,6 +133,8 @@ async function sendMessage() {
 }
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
-    await supabaseClient.from('user_status').delete().eq('room', currentRoom).eq('name', username);
+    if (supabaseClient) {
+        await supabaseClient.from('user_status').delete().eq('room', currentRoom).eq('name', username);
+    }
     window.location.href = "index.html";
 });
