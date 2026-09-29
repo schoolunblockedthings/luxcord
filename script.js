@@ -1,4 +1,4 @@
-const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
+const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -19,7 +19,7 @@ if (!username || !currentRoom) {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
     
     refreshChatData();
-    setInterval(refreshChatData, 4000); // 4 seconds to be safe with network speeds
+    setInterval(refreshChatData, 4000);
 }
 
 async function refreshChatData() {
@@ -28,9 +28,7 @@ async function refreshChatData() {
         'Authorization': `Bearer ${SUPABASE_KEY}`
     };
 
-    // STEP 1: Heartbeat
     try {
-        // FIXED: Removed query strings from POST url which causes errors in Supabase API
         const res = await fetch(`${SUPABASE_URL}/rest/v1/user_status`, {
             method: 'POST',
             headers: {
@@ -45,24 +43,13 @@ async function refreshChatData() {
                 typing_timestamp: Date.now()
             })
         });
-        if (!res.ok) console.log("Heartbeat status code: " + res.status);
-    } catch (err) {
-        console.error("Heartbeat fail: ", err);
-    }
+    } catch (err) {}
 
-    // STEP 2: Fetch Messages
     try {
         const msgResponse = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages?room=eq.${encodeURIComponent(currentRoom)}&order=id.asc`, {
             method: 'GET',
             headers: headers
         });
-        
-        if (!msgResponse.ok) {
-            const errText = await msgResponse.text();
-            alert("Failed to load messages from database: " + errText);
-            return;
-        }
-
         const messages = await msgResponse.json();
         
         if (messages && messages.length !== lastMessageCount) {
@@ -78,11 +65,8 @@ async function refreshChatData() {
             }
             lastMessageCount = messages.length;
         }
-    } catch (err) {
-        alert("Message Fetch Exception: " + err.message);
-    }
+    } catch (err) {}
 
-    // STEP 3: Fetch Typing Users
     try {
         const statusResponse = await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}`, {
             method: 'GET',
@@ -109,7 +93,8 @@ async function refreshChatData() {
 }
 
 messageInput.addEventListener("input", async () => {
-    charCounter.innerText = `${messageInput.value.length}/100`;
+    // FIXED: Updated character counter text layout to reflect 1000 max limit
+    charCounter.innerText = `${messageInput.value.length}/1000`;
     try {
         await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
             method: 'PATCH',
@@ -136,6 +121,7 @@ async function sendMessage() {
     if (!text) return;
 
     messageInput.value = "";
+    // FIXED: Reset to 1000 limit display text
     charCounter.innerText = "0/1000";
 
     const headers = {
@@ -151,7 +137,7 @@ async function sendMessage() {
             body: JSON.stringify({ is_typing: false })
         });
 
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
             method: 'POST',
             headers: {
                 ...headers,
@@ -164,15 +150,8 @@ async function sendMessage() {
             })
         });
 
-        if (!response.ok) {
-            const errData = await response.text();
-            alert("Database rejected your message submission:\n" + errData);
-        } else {
-            setTimeout(refreshChatData, 300); // Give the database a moment to register before redrawing
-        }
-    } catch (err) {
-        alert("Network Send Error: " + err.message);
-    }
+        setTimeout(refreshChatData, 300);
+    } catch (err) {}
 }
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
