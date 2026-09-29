@@ -19,7 +19,7 @@ if (!username || !currentRoom) {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
     
     refreshChatData();
-    setInterval(refreshChatData, 4000);
+    setInterval(refreshChatData, 4000); // 4 seconds to be safe with network speeds
 }
 
 async function refreshChatData() {
@@ -28,8 +28,10 @@ async function refreshChatData() {
         'Authorization': `Bearer ${SUPABASE_KEY}`
     };
 
+    // STEP 1: Heartbeat
     try {
-        await fetch(`${SUPABASE_URL}/rest/v1/user_status`, {
+        // FIXED: Removed query strings from POST url which causes errors in Supabase API
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/user_status`, {
             method: 'POST',
             headers: {
                 ...headers,
@@ -43,8 +45,12 @@ async function refreshChatData() {
                 typing_timestamp: Date.now()
             })
         });
-    } catch (err) {}
+        if (!res.ok) console.log("Heartbeat status code: " + res.status);
+    } catch (err) {
+        console.error("Heartbeat fail: ", err);
+    }
 
+    // STEP 2: Fetch Messages
     try {
         const msgResponse = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages?room=eq.${encodeURIComponent(currentRoom)}&order=id.asc`, {
             method: 'GET',
@@ -53,7 +59,7 @@ async function refreshChatData() {
         
         if (!msgResponse.ok) {
             const errText = await msgResponse.text();
-            alert("Database Error loading messages: " + errText);
+            alert("Failed to load messages from database: " + errText);
             return;
         }
 
@@ -73,9 +79,10 @@ async function refreshChatData() {
             lastMessageCount = messages.length;
         }
     } catch (err) {
-        alert("Fetch exception: " + err.message);
+        alert("Message Fetch Exception: " + err.message);
     }
 
+    // STEP 3: Fetch Typing Users
     try {
         const statusResponse = await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}`, {
             method: 'GET',
@@ -102,7 +109,7 @@ async function refreshChatData() {
 }
 
 messageInput.addEventListener("input", async () => {
-    charCounter.innerText = `${messageInput.value.length}/1000`;
+    charCounter.innerText = `${messageInput.value.length}/100`;
     try {
         await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
             method: 'PATCH',
@@ -129,7 +136,7 @@ async function sendMessage() {
     if (!text) return;
 
     messageInput.value = "";
-    charCounter.innerText = "0/1000";
+    charCounter.innerText = "0/100";
 
     const headers = {
         'apikey': SUPABASE_KEY,
@@ -144,7 +151,6 @@ async function sendMessage() {
             body: JSON.stringify({ is_typing: false })
         });
 
-        // ENABLED ERROR ALERTS HERE
         const response = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
             method: 'POST',
             headers: {
@@ -160,12 +166,12 @@ async function sendMessage() {
 
         if (!response.ok) {
             const errData = await response.text();
-            alert("Database Error sending message:\n" + errData);
+            alert("Database rejected your message submission:\n" + errData);
         } else {
-            setTimeout(refreshChatData, 300);
+            setTimeout(refreshChatData, 300); // Give the database a moment to register before redrawing
         }
     } catch (err) {
-        alert("Network Send Exception: " + err.message);
+        alert("Network Send Error: " + err.message);
     }
 }
 
