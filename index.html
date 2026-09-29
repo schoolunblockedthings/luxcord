@@ -19,7 +19,7 @@
 <div id="guest-modal" class="modal hidden"><div class="modal-card"><button class="x" data-close>×</button><h2>Join a room</h2><label>Username<input id="guest-name" maxlength="32"></label><label>Room code<input id="guest-room" maxlength="64"></label><button id="guest-join" class="primary wide">Join room</button></div></div>
 <script>
 const SUPABASE_URL="https://mvgqpkdldciwzqgpayoo.supabase.co";
-const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsY2Npd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
+const SUPABASE_KEY="sb_publishable_53vpmb7o0GOxHgeGmLIMeg_CrDK2oG4";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);let mode="login";
 (async()=>{const s=await sb.auth.getSession();if(s.data.session)location.href="chat.html"})();
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.getElementById("username-wrap").classList.toggle("hidden",mode!=="signup");document.getElementById("auth-submit").textContent=mode==="signup"?"Create account":"Log in";document.getElementById("auth-error").textContent=""});
