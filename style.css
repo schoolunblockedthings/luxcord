@@ -327,11 +327,8 @@ button {
 }
 
 .message-avatar {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    max-width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
 }
 
 /* =============================
@@ -496,9 +493,9 @@ button {
     border-radius: 8px;
 }
 
-/* =========================================================
-   DM / ROOM LAYOUT
-========================================================= */
+/* =============================
+   DM / ROOM
+============================= */
 
 .view {
     width: 100%;
@@ -546,25 +543,24 @@ button {
     overflow: hidden;
 }
 
-/* =========================================================
+/* =============================
    MESSAGE SCROLLER
-========================================================= */
+============================= */
 
 .messages {
-    display: block;
     flex: 1 1 auto;
     width: 100%;
     min-width: 0;
     min-height: 0;
     height: 0;
+
     overflow-x: hidden;
     overflow-y: auto;
-    padding: 16px;
-}
 
-/* =========================================================
-   SCROLLBAR
-========================================================= */
+    padding: 16px;
+
+    display: block;
+}
 
 .messages::-webkit-scrollbar,
 .dm-list::-webkit-scrollbar,
@@ -585,73 +581,57 @@ button {
     border-radius: 10px;
 }
 
-.messages::-webkit-scrollbar-thumb:hover,
-.dm-list::-webkit-scrollbar-thumb:hover,
-.members::-webkit-scrollbar-thumb:hover {
-    background: #414654;
-}
-
-/* =========================================================
-   NORMAL ROOM MESSAGES
-========================================================= */
+/* =============================
+   NORMAL ROOM MESSAGE
+============================= */
 
 .message {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    justify-content: flex-start;
+    display: grid;
+
+    grid-template-columns: 36px minmax(0, 1fr);
+
+    column-gap: 10px;
 
     width: 100%;
-    min-width: 0;
-
-    gap: 11px;
+    height: auto;
+    min-height: 0;
 
     margin: 0 0 18px 0;
     padding: 0;
 
-    animation: messageIn 0.12s ease-out;
+    align-items: start;
 }
 
 .message:last-child {
     margin-bottom: 0;
 }
 
-@keyframes messageIn {
-    from {
-        opacity: 0;
-        transform: translateY(3px);
-    }
+/* =============================
+   DM MESSAGE — HARD FIX
+============================= */
 
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* =========================================================
-   DM MESSAGE FIX
-   This intentionally overrides all generic message layout.
-========================================================= */
-
-.dm-chat .messages {
+#dm-messages {
     display: block !important;
-    flex-direction: initial !important;
-    justify-content: initial !important;
-    align-items: initial !important;
-    align-content: initial !important;
-    gap: 0 !important;
+    padding: 16px !important;
+
+    /* NEVER distribute messages */
+    justify-content: normal !important;
+    align-content: normal !important;
+    align-items: normal !important;
 }
 
-.dm-chat .message,
-#dm-messages > .message {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: flex-start !important;
-    justify-content: flex-start !important;
-    align-content: flex-start !important;
+#dm-messages > .message,
+.dm-chat #dm-messages > .message {
+    display: grid !important;
+
+    grid-template-columns: 36px minmax(0, 1fr) !important;
+
+    grid-template-rows: auto !important;
+
+    column-gap: 10px !important;
+    row-gap: 0 !important;
 
     width: 100% !important;
-    min-width: 0 !important;
 
     height: auto !important;
     min-height: 0 !important;
@@ -660,53 +640,49 @@ button {
     margin: 0 0 9px 0 !important;
     padding: 0 !important;
 
-    gap: 10px !important;
-
-    position: relative !important;
+    align-items: start !important;
+    align-content: start !important;
+    justify-content: start !important;
 }
 
-.dm-chat .message:last-child,
 #dm-messages > .message:last-child {
     margin-bottom: 0 !important;
 }
 
-/* =========================================================
+/* =============================
    DM AVATAR
-========================================================= */
+============================= */
 
-.dm-chat .message-avatar,
 #dm-messages .message-avatar {
-    display: grid !important;
-    place-items: center !important;
+    grid-column: 1 !important;
+    grid-row: 1 !important;
 
     width: 36px !important;
+    height: 36px !important;
+
     min-width: 36px !important;
     max-width: 36px !important;
 
-    height: 36px !important;
     min-height: 36px !important;
     max-height: 36px !important;
 
-    flex: 0 0 36px !important;
-
     margin: 0 !important;
     padding: 0 !important;
+
+    align-self: start !important;
 }
 
-/* =========================================================
-   MESSAGE BODY
-========================================================= */
+/* =============================
+   DM BODY
+============================= */
 
-.message-body,
-.dm-chat .message-body,
 #dm-messages .message-body {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+
     display: block !important;
 
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: none !important;
-
-    flex: 1 1 auto !important;
+    width: 100% !important;
 
     height: auto !important;
     min-height: 0 !important;
@@ -715,27 +691,26 @@ button {
     margin: 0 !important;
     padding: 0 !important;
 
-    align-self: flex-start !important;
+    align-self: start !important;
 }
 
-/* =========================================================
-   MESSAGE HEADER
-========================================================= */
+/* =============================
+   DM HEADER
+============================= */
 
-.message-head,
-.dm-chat .message-head,
 #dm-messages .message-head {
     display: flex !important;
 
     flex-direction: row !important;
+
     align-items: baseline !important;
     justify-content: flex-start !important;
-    align-content: flex-start !important;
 
     width: 100% !important;
-    height: auto !important;
+
+    height: 18px !important;
     min-height: 18px !important;
-    max-height: none !important;
+    max-height: 18px !important;
 
     margin: 0 !important;
     padding: 0 !important;
@@ -745,26 +720,26 @@ button {
     line-height: 18px !important;
 }
 
-.message-head b,
-.dm-chat .message-head b,
 #dm-messages .message-head b {
     display: inline !important;
 
     margin: 0 !important;
     padding: 0 !important;
 
+    height: 18px !important;
+
     line-height: 18px !important;
 
     color: #fff;
 }
 
-.message-head time,
-.dm-chat .message-head time,
 #dm-messages .message-head time {
     display: inline !important;
 
     margin: 0 !important;
     padding: 0 !important;
+
+    height: 16px !important;
 
     font-size: 11px;
     line-height: 16px !important;
@@ -772,47 +747,48 @@ button {
     color: #707687;
 }
 
-/* =========================================================
-   MESSAGE TEXT
-========================================================= */
+/* =============================
+   DM TEXT
+============================= */
 
-.message-text,
-.dm-chat .message-text,
 #dm-messages .message-text {
     display: block !important;
 
     width: 100% !important;
+
     height: auto !important;
-    min-height: 0 !important;
+    min-height: 19px !important;
     max-height: none !important;
 
     margin: 1px 0 0 0 !important;
     padding: 0 !important;
 
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
 
     color: #d9dbe2;
 
     font-size: 14px;
     line-height: 19px !important;
+
+    text-align: left !important;
 }
 
-/* =========================================================
-   MESSAGE ACTIONS
-========================================================= */
+/* =============================
+   DM ACTIONS
+============================= */
 
-.message-actions,
-.dm-chat .message-actions,
 #dm-messages .message-actions {
     display: flex !important;
 
     flex-direction: row !important;
+
     align-items: center !important;
     justify-content: flex-start !important;
 
-    width: auto !important;
+    width: 100% !important;
+
     height: 20px !important;
     min-height: 20px !important;
     max-height: 20px !important;
@@ -823,8 +799,6 @@ button {
     gap: 2px !important;
 }
 
-.message-actions button,
-.dm-chat .message-actions button,
 #dm-messages .message-actions button {
     display: inline-flex !important;
 
@@ -832,46 +806,35 @@ button {
     justify-content: center !important;
 
     width: auto !important;
+
     height: 20px !important;
     min-height: 20px !important;
+    max-height: 20px !important;
 
     margin: 0 !important;
     padding: 1px 4px !important;
 
     background: transparent;
+
     color: #7f8495;
 
     font-size: 12px;
     line-height: 18px !important;
-
-    border-radius: 5px;
 }
 
-.message-actions button:hover {
+#dm-messages .message-actions button:hover {
     background: #242832;
     color: white;
 }
 
-/* =========================================================
+/* =============================
    REACTIONS
-========================================================= */
+============================= */
 
-.reactions,
-.dm-chat .reactions,
-#dm-messages .reactions {
-    display: flex !important;
-
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-
-    width: auto !important;
-
-    margin: 2px 0 0 0 !important;
-    padding: 0 !important;
-
-    gap: 4px !important;
-
+.reactions {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
     flex-wrap: wrap;
 }
 
@@ -881,12 +844,11 @@ button {
     border-radius: 9px;
     padding: 3px 7px;
     font-size: 12px;
-    margin: 0 !important;
 }
 
-/* =========================================================
+/* =============================
    REPLIES
-========================================================= */
+============================= */
 
 .reply-preview {
     border-left: 2px solid #6c5ce7;
@@ -912,9 +874,9 @@ button {
     font-size: 18px;
 }
 
-/* =========================================================
+/* =============================
    COMPOSER
-========================================================= */
+============================= */
 
 .composer {
     flex: 0 0 auto;
@@ -949,20 +911,16 @@ button {
 }
 
 .typing {
-    flex: 0 0 22px;
-
     height: 22px;
     min-height: 22px;
-
     padding: 0 20px;
-
     color: #858b9a;
     font-size: 12px;
 }
 
-/* =========================================================
-   EMPTY STATE
-========================================================= */
+/* =============================
+   EMPTY
+============================= */
 
 .empty-state {
     margin: auto;
@@ -975,22 +933,19 @@ button {
     color: white;
 }
 
-/* =========================================================
-   MISC
-========================================================= */
-
 .muted {
     color: #747a8b;
     font-size: 13px;
 }
 
-/* =========================================================
+/* =============================
    MODALS
-========================================================= */
+============================= */
 
 .modal {
     position: fixed;
     inset: 0;
+
     background: #0009;
 
     display: grid;
@@ -1050,9 +1005,9 @@ button {
     margin: 0 !important;
 }
 
-/* =========================================================
+/* =============================
    NOTIFICATIONS
-========================================================= */
+============================= */
 
 .popover {
     position: fixed;
@@ -1112,9 +1067,9 @@ button {
     min-height: 16px;
 }
 
-/* =========================================================
+/* =============================
    LIGHT THEME
-========================================================= */
+============================= */
 
 [data-theme="light"] {
     background: #f2f3f7;
@@ -1183,9 +1138,9 @@ button {
     background: #eef0f5;
 }
 
-/* =========================================================
+/* =============================
    MIDNIGHT
-========================================================= */
+============================= */
 
 [data-theme="midnight"] {
     background: #080a10;
@@ -1210,9 +1165,9 @@ button {
     background: #10131c;
 }
 
-/* =========================================================
+/* =============================
    MOBILE
-========================================================= */
+============================= */
 
 @media (max-width: 850px) {
     .app {
