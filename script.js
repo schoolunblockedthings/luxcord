@@ -1,12 +1,12 @@
 const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
-let supabaseClient = null;
 const urlParams = new URLSearchParams(window.location.search);
 const username = urlParams.get('name');
 const currentRoom = urlParams.get('room');
 
 let audio = new Audio("https://code.org");
+let lastMessageCount = 0;
 
 const chatDisplay = document.getElementById("chat-display");
 const messageInput = document.getElementById("message-input");
@@ -18,99 +18,103 @@ if (!username || !currentRoom) {
 } else {
     document.getElementById("room-display").innerText = "Room: " + currentRoom;
     
-    let checkCount = 0;
-    // FIXED: Changed interval time from 5000ms to 200ms for instant loading
-    const libraryLoader = setInterval(() => {
-        if (window.supabase) {
-            clearInterval(libraryLoader);
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            setupChatRoom();
-        } else {
-            checkCount++;
-            if (checkCount > 25) { // 25 checks at 200ms = 5 seconds total wait time
-                clearInterval(libraryLoader);
-                alert("Critical Error: None of the backup network servers responded. The network firewall is entirely blocking database connections.");
-            }
-        }
-    }, 200); 
+    // Run the initial data fetch immediately
+    refreshChatData();
+    
+    // Loop every 3 seconds to fetch new messages and update typing indicators
+    setInterval(refreshChatData, 3000);
 }
 
-async function setupChatRoom() {
-    const now = Date.now();
+async function refreshChatData() {
+    try {
+        const headers = {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+        };
 
-    await supabaseClient.from('user_status').upsert({
-        room: currentRoom,
-        name: username,
-        last_active: now,
-        is_typing: false,
-        typing_timestamp: 0
-    }, { onConflict: 'room,name' });
+        // 1. Update our own online timestamp heartbeat
+        await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
+            method: 'POST',
+            headers: {
+                ...headers,
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify({
+                room: currentRoom,
+                name: username,
+                last_active: Date.now(),
+                typing_timestamp: Date.now()
+            })
+        });
 
-    setInterval(async () => {
-        if (supabaseClient) {
-            await supabaseClient.from('user_status').update({ last_active: Date.now() }).eq('room', currentRoom).eq('name', username);
-        }
-    }, 5000);
-
-    const { data: messages } = await supabaseClient.from('chat_messages').select('*').eq('room', currentRoom).order('id', { ascending: true });
-    if (messages) {
-        messages.forEach(msg => appendMessage(msg));
-    }
-
-    supabaseClient.channel('messages-channel')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room=eq.${currentRoom}` }, payload => {
-            appendMessage(payload.new);
-            if (payload.new.name !== username) {
+        // 2. Fetch all messages for the current room
+        const msgResponse = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages?room=eq.${encodeURIComponent(currentRoom)}&order=id.asc`, {
+            method: 'GET',
+            headers: headers
+        });
+        const messages = await msgResponse.json();
+        
+        if (messages && messages.length !== lastMessageCount) {
+            chatDisplay.innerHTML = "";
+            messages.forEach(msg => {
+                const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                chatDisplay.innerHTML += `[${time}] <b>${msg.name}</b>: ${msg.message}\n`;
+            });
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+            
+            // Play sound if a new message arrives from a friend
+            if (lastMessageCount > 0 && messages[messages.length - 1].name !== username) {
                 audio.play().catch(() => {});
             }
-        })
-        .subscribe();
-
-    supabaseClient.channel('status-channel')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_status', filter: `room=eq.${currentRoom}` }, () => {
-            updateStatusDisplay();
-        })
-        .subscribe();
-
-    updateStatusDisplay();
-}
-
-function appendMessage(msg) {
-    const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    chatDisplay.innerHTML += `[${time}] <b>${msg.name}</b>: ${msg.message}\n`;
-    chatDisplay.scrollTop = chatDisplay.scrollHeight;
-}
-
-async function updateStatusDisplay() {
-    if (!supabaseClient) return;
-    const { data: users } = await supabaseClient.from('user_status').select('*').eq('room', currentRoom);
-    if (!users) return;
-
-    let typers = [];
-    const now = Date.now();
-
-    users.forEach(u => {
-        if (u.name !== username) {
-            const isOnline = (now - u.last_active < 15000);
-            const isTyping = u.is_typing && (now - u.typing_timestamp < 4000);
-
-            if (isTyping) {
-                let onlinePrefix = isOnline ? "(🟢)" : "";
-                typers.push(`${onlinePrefix}${u.name} - typing...`);
-            }
+            lastMessageCount = messages.length;
         }
-    });
-    typingLabel.innerText = typers.join("\n");
+
+        // 3. Fetch all active typing statuses
+        const statusResponse = await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}`, {
+            method: 'GET',
+            headers: headers
+        });
+        const users = await statusResponse.json();
+        
+        let typers = [];
+        const now = Date.now();
+        
+        if (users) {
+            users.forEach(u => {
+                if (u.name !== username) {
+                    const isOnline = (now - u.last_active < 15000);
+                    const isTyping = u.is_typing && (now - u.typing_timestamp < 4000);
+                    if (isTyping) {
+                        let onlinePrefix = isOnline ? "(🟢)" : "";
+                        typers.push(`${onlinePrefix}${u.name} - typing...`);
+                    }
+                }
+            });
+        }
+        typingLabel.innerText = typers.join("\n");
+
+    } catch (err) {
+        console.error("Error syncing data loop: ", err);
+    }
 }
 
+// Handle typing inputs
 messageInput.addEventListener("input", async () => {
     charCounter.innerText = `${messageInput.value.length}/100`;
-    if (supabaseClient) {
-        await supabaseClient.from('user_status').update({
+    
+    await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
+        method: 'PATCH',
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
             is_typing: true,
             typing_timestamp: Date.now()
-        }).eq('room', currentRoom).eq('name', username);
-    }
+        })
+    });
 });
 
 messageInput.addEventListener("keydown", (e) => {
@@ -120,31 +124,51 @@ document.getElementById("send-btn").addEventListener("click", sendMessage);
 
 async function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text || !supabaseClient) return;
+    if (!text) return;
 
     messageInput.value = "";
     charCounter.innerText = "0/100";
 
-    try {
-        await supabaseClient.from('user_status').update({ is_typing: false }).eq('room', currentRoom).eq('name', username);
+    const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+    };
 
-        const { error } = await supabaseClient.from('chat_messages').insert({
-            room: currentRoom,
-            name: username,
-            message: text
+    try {
+        // Turn typing status off
+        await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify({ is_typing: false })
         });
 
-        if (error) {
-            alert("Error sending message: " + error.message);
-        }
+        // Post new message row
+        await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                room: currentRoom,
+                name: username,
+                message: text
+            })
+        });
+
+        refreshChatData();
     } catch (err) {
-        alert("Exception while sending: " + err.message);
+        console.error("Failed to transmit text: ", err);
     }
 }
 
 document.getElementById("leave-btn").addEventListener("click", async () => {
-    if (supabaseClient) {
-        await supabaseClient.from('user_status').delete().eq('room', currentRoom).eq('name', username);
-    }
+    try {
+        await fetch(`${SUPABASE_URL}/rest/v1/user_status?room=eq.${encodeURIComponent(currentRoom)}&name=eq.${encodeURIComponent(username)}`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+    } catch (e) {}
     window.location.href = "index.html";
 });
