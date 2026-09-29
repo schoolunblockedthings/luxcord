@@ -21,24 +21,7 @@
         </div>
     </div>
 
-    <!-- Smart Fallback CDN Layer -->
-    <script src="https://cloudflare.com"></script>
-    <script>
-        // If Cloudflare fails, dynamically try loading via unpkg's full direct bundle paths
-        if (!window.supabase) {
-            console.log("Cloudflare blocked, trying Unpkg...");
-            document.write('<script src="https://unpkg.com"><\/script>');
-        }
-    </script>
-    <script>
-        // Final ultimate backup using modern browser module fetching if both traditional routes fail
-        if (!window.supabase) {
-            console.log("Unpkg blocked, trying Skypack module fallback...");
-            document.write('<script src="https://skypack.dev"><\/script>');
-        }
-    </script>
-
-    <!-- Load your custom chat code last -->
+    <!-- No external CDNs are needed here anymore! -->
     <script src="/script.js"></script>
 </body>
 </html>
