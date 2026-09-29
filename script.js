@@ -1,7 +1,8 @@
-const NEXT_PUBLIC_SUPABASE_URL="https://mvgqpkdldciwzqgpayoo.supabase.co";
-const NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="sb_publishable__YusW9lo6b59V8pRXUXIEw_0Ejsw6B4";
+const SUPABASE_URL = "https://mvgqpkdldciwzqgpayoo.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12Z3Fwa2RsZGNpd3pxZ3BheW9vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2ODkzMTAsImV4cCI6MjEwNjI2NTMxMH0.7VSGwqyucBwdDCZzlS_xCLdLhEQaN3laJBYYDmGnN08";
 
-const supabase = lib.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// FIXED: Correct initialization for the Supabase CDN library
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let username = "";
 let currentRoom = "";
@@ -22,7 +23,6 @@ document.getElementById("join-btn").addEventListener("click", async () => {
 
     if (!username || !currentRoom) return;
 
-    // Check if duplicate username is active in the same room
     const now = Date.now();
     const { data: users, error } = await supabase
         .from('user_status')
@@ -45,7 +45,6 @@ document.getElementById("join-btn").addEventListener("click", async () => {
 async function setupChatRoom() {
     const now = Date.now();
 
-    // 1. Join room status
     await supabase.from('user_status').upsert({
         room: currentRoom,
         name: username,
@@ -54,18 +53,15 @@ async function setupChatRoom() {
         typing_timestamp: 0
     }, { onConflict: 'room,name' });
 
-    // 2. Continuous Online Heartbeat Loop
     setInterval(async () => {
         await supabase.from('user_status').update({ last_active: Date.now() }).eq('room', currentRoom).eq('name', username);
     }, 5000);
 
-    // 3. Load Existing Messages
     const { data: messages } = await supabase.from('chat_messages').select('*').eq('room', currentRoom).order('id', { ascending: true });
     if (messages) {
         messages.forEach(msg => appendMessage(msg));
     }
 
-    // 4. Stream New Messages Instantly (Supabase Realtime)
     supabase.channel('messages-channel')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room=eq.${currentRoom}` }, payload => {
             appendMessage(payload.new);
@@ -75,7 +71,6 @@ async function setupChatRoom() {
         })
         .subscribe();
 
-    // 5. Stream Typing & Online Changes Instantly
     supabase.channel('status-channel')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'user_status', filter: `room=eq.${currentRoom}` }, () => {
             updateStatusDisplay();
@@ -112,7 +107,6 @@ async function updateStatusDisplay() {
     typingLabel.innerText = typers.join("\n");
 }
 
-// Track input changes for typing status
 messageInput.addEventListener("input", async () => {
     charCounter.innerText = `${messageInput.value.length}/100`;
     await supabase.from('user_status').update({
@@ -121,7 +115,6 @@ messageInput.addEventListener("input", async () => {
     }).eq('room', currentRoom).eq('name', username);
 });
 
-// Hit enter to send
 messageInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendMessage();
 });
@@ -134,10 +127,8 @@ async function sendMessage() {
     messageInput.value = "";
     charCounter.innerText = "0/100";
 
-    // Set typing to false immediately when message is sent
     await supabase.from('user_status').update({ is_typing: false }).eq('room', currentRoom).eq('name', username);
 
-    // Insert to database
     await supabase.from('chat_messages').insert({
         room: currentRoom,
         name: username,
@@ -145,7 +136,6 @@ async function sendMessage() {
     });
 }
 
-// Clean exit when clicking Leave
 document.getElementById("leave-btn").addEventListener("click", async () => {
     await supabase.from('user_status').delete().eq('room', currentRoom).eq('name', username);
     window.location.reload();
