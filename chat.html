@@ -637,6 +637,27 @@
     </div>
 </div>
 
+<!-- USER PROFILE MODAL -->
+<div id="user-profile-modal" class="modal hidden">
+    <div class="modal-card user-profile-card">
+        <button class="x modal-close" type="button">×</button>
+        <div id="user-profile-avatar" class="user-profile-avatar"></div>
+        <h2 id="user-profile-name">User</h2>
+        <div id="user-profile-username" class="muted">@user</div>
+        <div id="user-profile-status" class="user-profile-status"></div>
+        <div class="user-profile-section">
+            <h3>Bio</h3>
+            <p id="user-profile-bio">No bio yet.</p>
+        </div>
+        <div class="user-profile-section">
+            <h3>Your private notes</h3>
+            <textarea id="user-profile-notes" maxlength="5000" placeholder="Write notes about this person..."></textarea>
+            <div id="user-profile-notes-status" class="muted"></div>
+            <button id="save-user-profile-notes" class="primary wide" type="button">Save notes</button>
+        </div>
+    </div>
+</div>
+
 <!-- SETTINGS MODAL -->
 <div
     id="settings-modal"
