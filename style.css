@@ -1584,17 +1584,7 @@ button {
     align-items:center;
     color:#858da0;
 }
-.typing::before{
-    content:"";
-    display:inline-block;
-    width:5px;
-    height:5px;
-    margin-right:7px;
-    border-radius:50%;
-    background:#7c6cf2;
-    box-shadow:8px 0 #7c6cf2,16px 0 #7c6cf2;
-    animation:lxTyping 1.1s infinite ease-in-out;
-}
+
 @keyframes lxTyping{
     0%,100%{opacity:.3;transform:translateY(0)}
     50%{opacity:1;transform:translateY(-2px)}
@@ -1756,7 +1746,14 @@ button {
 
 /* Profile photos */
 .avatar-photo { overflow: hidden; padding: 0; }
-.avatar-photo img { width:100%; height:100%; display:block; object-fit:cover; border-radius:inherit; }
+.avatar-photo img {
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:cover;
+    border-radius:inherit;
+    transform:scale(var(--luxcord-avatar-zoom, 1));
+}
 .message-avatar.avatar-photo { border-radius:50%; }
 .person-card .avatar-photo { flex:0 0 auto; }
 #me-avatar.avatar-photo { border-radius:12px; }
