@@ -1496,7 +1496,14 @@ async function refreshDM() {
                 line-height:19px;
                 text-align:left;
             "
-        >${esc(message.message)}</div>
+        >${message.deleted_at ? "<i>Message deleted</i>" : esc(message.message)}${message.edited_at && !message.deleted_at ? ' <small class="dm-edited">(edited)</small>' : ""}</div>
+
+        ${message.attachment_url && !message.deleted_at ? (() => {
+            const isImage = /\\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(message.attachment_name || message.attachment_url);
+            return isImage
+                ? `<a href="${esc(message.attachment_url)}" target="_blank" rel="noopener" class="dm-attachment"><img src="${esc(message.attachment_url)}" alt="${esc(message.attachment_name || "Image")}" loading="lazy" style="max-width:320px;max-height:320px;border-radius:10px;display:block;margin-top:6px;object-fit:contain;"></a>`
+                : `<a href="${esc(message.attachment_url)}" target="_blank" rel="noopener" class="dm-attachment">📎 ${esc(message.attachment_name || "Attachment")}</a>`;
+        })() : ""}
 
         ${message.sender_id === session.user.id ? `<div class="dm-read-state">${message.read_at ? "Seen" : "Sent"}</div>` : ""}
 
