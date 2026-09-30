@@ -79,6 +79,9 @@
 
         <div id="dm-people"></div>
 
+        <div class="side-label group-sidebar-label">GROUP CHATS</div>
+        <button id="new-group-chat" class="side-item group-create-btn" type="button">＋ Create group</button>
+        <div id="group-people"></div>
 
         <div class="side-label">
             ROOM
@@ -335,22 +338,6 @@
 
             <div class="dm-layout">
 
-                <!-- DM FRIEND LIST -->
-                <aside class="dm-list">
-
-                    <h3>
-                        Messages
-                    </h3>
-
-                    <!-- IMPORTANT:
-                         This is intentionally different from
-                         the main sidebar's dm-people ID. -->
-                    <div id="dm-people-main"></div>
-
-                </aside>
-
-
-                <!-- DM CHAT -->
                 <div class="dm-chat">
 
                     <div id="dm-conversation-head" class="conversation-head hidden">
@@ -405,7 +392,7 @@
                         <input
                             id="dm-input"
                             maxlength="1000"
-                            placeholder="Message your friend..."
+                            placeholder="Message..."
                         >
                             <div id="dm-mention-dropdown" class="mention-dropdown hidden"></div>
                         </div>
@@ -424,6 +411,16 @@
                     </div>
 
                 </div>
+
+                <aside id="group-members-panel" class="members group-members-panel hidden">
+                    <div class="group-members-head">
+                        <div>
+                            <h3>Members</h3>
+                            <span id="group-member-count">0 members</span>
+                        </div>
+                    </div>
+                    <div id="group-members"></div>
+                </aside>
 
             </div>
 
