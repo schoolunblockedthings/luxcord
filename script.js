@@ -49,37 +49,78 @@ const close = (id) => {
 // =============================
 
 async function boot() {
-    const result = await sb.auth.getSession();
+    try {
+        const result = await sb.auth.getSession();
 
-    session = result.data.session;
+        if (result.error) {
+            console.error("Luxcord auth session error:", result.error);
+            renderGuest();
+            bind();
+            return;
+        }
 
-    if (session) {
-        await loadMe();
+        session = result.data?.session || null;
 
-        renderMe();
+        if (session) {
+            await loadMe();
+            renderMe();
 
-        setupRealtime();
+            setupRealtime();
 
-        await Promise.all([
-            loadFriends(),
-            loadDMs(),
-            loadNotifications()
-        ]);
-    } else {
-        renderGuest();
-    }
+            await Promise.all([
+                loadFriends(),
+                loadDMs(),
+                loadNotifications()
+            ]);
+        } else {
+            renderGuest();
+        }
 
-    bind();
+        bind();
 
-    if (room) {
-        await joinRoom(
-            room,
-            params.get("name") || "Guest"
-        );
-    } else if (!session) {
-        $("logout-btn")?.classList.add("hidden");
+        if (room) {
+            await joinRoom(
+                room,
+                params.get("name") || "Guest"
+            );
+        } else if (!session) {
+            $("logout-btn")?.classList.add("hidden");
+        }
+    } catch (error) {
+        console.error("Luxcord startup error:", error);
+        // Keep the app usable even if a secondary feature fails during startup.
+        if (session) {
+            renderMe();
+            bind();
+        } else {
+            renderGuest();
+            bind();
+        }
     }
 }
+
+sb.auth.onAuthStateChange((event, nextSession) => {
+    if (event === "SIGNED_IN" && nextSession) {
+        session = nextSession;
+        loadMe().then(() => {
+            renderMe();
+            setupRealtime();
+            return Promise.all([
+                loadFriends(),
+                loadDMs(),
+                loadNotifications()
+            ]);
+        }).catch(error => console.error("Post-login startup error:", error));
+    }
+
+    if (event === "SIGNED_OUT") {
+        session = null;
+        me = null;
+        if (location.pathname.endsWith("chat.html")) {
+            location.href = "index.html";
+        }
+    }
+});
 
 
 async function loadMe() {
