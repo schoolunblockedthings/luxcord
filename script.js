@@ -390,6 +390,9 @@ function bind() {
     $("new-group-chat")?.addEventListener("click", openGroupCreateModal);
     $("group-create-cancel")?.addEventListener("click", () => close("group-create-modal"));
     $("group-create-submit")?.addEventListener("click", createGroupChat);
+    $("group-add-people")?.addEventListener("click", openGroupAddModal);
+    $("group-add-cancel")?.addEventListener("click", () => close("group-add-modal"));
+    $("group-add-submit")?.addEventListener("click", addGroupPeople);
 
     $("home-room")?.addEventListener(
         "click",
@@ -1746,6 +1749,77 @@ window.openGroupChat = async function (id) {
     await loadGroupMembers(id);
 };
 
+async function openGroupAddModal() {
+    if (!session || !groupChat) return;
+    const list = $("group-add-friends");
+    const error = $("group-add-error");
+    if (!list) return;
+    error.textContent = "Loading...";
+    open("group-add-modal");
+
+    const membersResult = await sb.from("group_members").select("user_id").eq("group_id", groupChat.id);
+    if (membersResult.error) { error.textContent = membersResult.error.message; return; }
+    const memberIds = new Set((membersResult.data || []).map(row => row.user_id));
+
+    const friendsResult = await sb.from("friendships")
+        .select("requester,addressee")
+        .or(`and(requester.eq.${session.user.id},status.eq.accepted),and(addressee.eq.${session.user.id},status.eq.accepted)`);
+    if (friendsResult.error) { error.textContent = friendsResult.error.message; return; }
+
+    const friendIds = [...new Set((friendsResult.data || []).map(row =>
+        row.requester === session.user.id ? row.addressee : row.requester
+    ))].filter(id => !memberIds.has(id));
+
+    if (!friendIds.length) {
+        list.innerHTML = '<div class="muted" style="padding:10px">All your friends are already in this group.</div>';
+        error.textContent = "";
+        return;
+    }
+
+    const profiles = await sb.from("profiles")
+        .select("id,username,display_name,avatar_url")
+        .in("id", friendIds);
+    if (profiles.error) { error.textContent = profiles.error.message; return; }
+
+    list.innerHTML = (profiles.data || []).map(profile => `
+        <label class="group-friend-option">
+            <input type="checkbox" value="${esc(profile.id)}">
+            ${avatarHTML(profile, "group-friend-avatar")}
+            <span><b>${esc(profile.display_name || profile.username || "User")}</b><small>@${esc(profile.username || "")}</small></span>
+        </label>
+    `).join("");
+    error.textContent = "";
+}
+
+async function addGroupPeople() {
+    if (!session || !groupChat) return;
+    const list = $("group-add-friends");
+    const error = $("group-add-error");
+    const selected = [...(list?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(input => input.value);
+    if (!selected.length) { error.textContent = "Select at least one friend."; return; }
+
+    $("group-add-submit").disabled = true;
+    $("group-add-submit").textContent = "Adding...";
+    const result = await sb.from("group_members").insert([...new Set(selected)].map(userId => ({
+        group_id: groupChat.id,
+        user_id: userId,
+        added_by: session.user.id
+    })));
+
+    if (result.error) {
+        error.textContent = result.error.message;
+        $("group-add-submit").disabled = false;
+        $("group-add-submit").textContent = "Add people";
+        return;
+    }
+
+    close("group-add-modal");
+    $("group-add-submit").disabled = false;
+    $("group-add-submit").textContent = "Add people";
+    await loadGroupMembers(groupChat.id);
+    await loadGroupChats();
+}
+
 async function loadGroupMembers(groupId) {
     if (!groupId || !$("group-members")) return;
 
@@ -1761,18 +1835,20 @@ async function loadGroupMembers(groupId) {
         const profile = profileMap[id] || { id, display_name: "User" };
         const online = luxIsOnline(id);
         return `
-            <div class="group-member-row" data-group-member-id="${esc(id)}" onclick="openUserProfile('${esc(id)}')">
-                ${avatarHTML(profile, "group-member-avatar")}
-                <div class="group-member-info">
-                    <b>${esc(profile.display_name || profile.username || "User")}</b>
-                    <span data-group-member-status="${esc(id)}">${online ? "Online now" : "Offline"}</span>
+            <div class="group-member-row" data-group-member-id="${esc(id)}">
+                <div class="group-member-click" onclick="openUserProfile('${esc(id)}')">
+                    ${avatarHTML(profile, "group-member-avatar")}
+                    <div class="group-member-info">
+                        <b>${esc(profile.display_name || profile.username || "User")}</b>
+                        <span data-group-member-status="${esc(id)}">${online ? "Online now" : "Offline"}</span>
+                    </div>
                 </div>
                 <i class="group-online-dot ${online ? "online" : ""}" data-group-member-dot="${esc(id)}" title="${online ? "Online now" : "Offline"}"></i>
+                <button class="group-member-add" type="button" title="Add people" onclick="event.stopPropagation(); openGroupAddModal()">＋</button>
             </div>
         `;
     }).join("") || '<div class="muted" style="padding:10px">No members.</div>';
 }
-
 let dmRefreshing = false;
 
 async function refreshDM() {
