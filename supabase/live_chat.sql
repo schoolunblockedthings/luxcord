@@ -20,7 +20,8 @@ begin
     where m.conversation_id = c.id
       and c.id = p_conversation_id
       and auth.uid() in (c.user_a, c.user_b)
-      and m.sender_id <> auth.uid();
+      and m.sender_id <> auth.uid()
+      and m.read_at is null;
 end;
 $$;
 
