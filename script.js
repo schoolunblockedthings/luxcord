@@ -1803,6 +1803,8 @@ async function openUserProfile(userId) {
     $("user-profile-name").textContent = profile.display_name || profile.username || "User";
     $("user-profile-username").textContent = "@" + (profile.username || "user");
     const profileOnline = luxIsOnline(profile.id);
+    $("user-profile-status").dataset.profileStatusUserId = profile.id;
+    $("user-profile-status").className = "user-profile-status";
     $("user-profile-status").textContent = profileOnline ? "Online now" : "Offline";
     $("user-profile-bio").textContent = profile.bio || "No bio yet.";
     const notes = await sb.from("profile_notes").select("notes").eq("user_id", session.user.id).eq("profile_id", userId).maybeSingle();
@@ -2335,8 +2337,15 @@ function luxRenderOnline() {
     document.querySelectorAll("[data-dm-user-id]").forEach(item => {
         const dot = item.querySelector(".lux-online-dot"); if (!dot) return;
         const online = luxIsOnline(item.dataset.dmUserId);
-        dot.textContent = online ? "●" : "○"; dot.title = online ? "Online now" : "Offline";
+        dot.textContent = online ? "●" : "○";
+        dot.title = online ? "Online now" : "Offline";
         dot.classList.toggle("online", online);
+    });
+
+    document.querySelectorAll("[data-profile-status-user-id]").forEach(item => {
+        const online = luxIsOnline(item.dataset.profileStatusUserId);
+        item.textContent = online ? "Online now" : "Offline";
+        item.classList.toggle("online", online);
     });
 }
 async function luxStartPresence() {
