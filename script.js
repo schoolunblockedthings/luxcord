@@ -393,6 +393,7 @@ function bind() {
     $("group-add-people")?.addEventListener("click", openGroupAddModal);
     $("group-add-cancel")?.addEventListener("click", () => close("group-add-modal"));
     $("group-add-submit")?.addEventListener("click", addGroupPeople);
+    $("group-leave")?.addEventListener("click", leaveGroup);
 
     $("home-room")?.addEventListener(
         "click",
@@ -1789,6 +1790,31 @@ async function openGroupAddModal() {
         </label>
     `).join("");
     error.textContent = "";
+}
+
+async function leaveGroup() {
+    if (!session || !groupChat) return;
+    if (!confirm("Leave " + groupChat.name + "? You won't receive messages from this group anymore.")) return;
+
+    const groupId = groupChat.id;
+    const result = await sb.from("group_members")
+        .delete()
+        .eq("group_id", groupId)
+        .eq("user_id", session.user.id);
+
+    if (result.error) {
+        alert(result.error.message);
+        return;
+    }
+
+    groupChat = null;
+    dm = null;
+    close("group-members-panel");
+    close("dm-conversation-head");
+    close("dm-messages");
+    close("dm-composer");
+    open("dm-empty");
+    await loadGroupChats();
 }
 
 async function addGroupPeople() {
