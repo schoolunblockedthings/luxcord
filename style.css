@@ -1871,3 +1871,31 @@ button {
 .mention-empty{padding:10px;color:#858da0;font-size:13px}
 .mention-link{color:#9d92ff;font-weight:700;cursor:pointer;border-radius:4px}
 .mention-link:hover{text-decoration:underline;background:rgba(157,146,255,.10)}
+
+
+/* Group chats */
+.group-sidebar-label{margin-top:4px}
+.group-create-btn{width:calc(100% - 16px);border:1px dashed var(--lx-border-strong);color:#8f96a8;background:transparent;text-align:left}
+.group-create-btn:hover{color:#fff;background:#20242e}
+.group-side-item{gap:8px}
+.group-icon{width:25px;height:25px;display:grid;place-items:center;border-radius:8px;background:rgba(124,108,242,.14);color:#9a8cff;font-weight:800}
+.group-side-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.group-side-count{margin-left:auto;color:#697184;font-size:11px}
+.group-empty{padding:6px 10px;font-size:12px}
+.dm-layout{grid-template-columns:minmax(0,1fr) 240px}
+.group-members-panel{width:auto;border-left:1px solid var(--lx-border);border-right:0;padding:16px 12px}
+.group-members-panel.hidden{display:none}
+.group-members-head{display:flex;align-items:center;padding:4px 6px 12px}
+.group-members-head h3{margin:0;color:#7d8597;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.group-members-head span{font-size:11px;color:#697184}
+.group-member-row{display:flex;align-items:center;gap:9px;padding:8px 7px;border-radius:9px;cursor:pointer}
+.group-member-row:hover{background:#1e222c}
+.group-member-avatar{width:32px;height:32px;min-width:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center}
+.group-member-avatar.avatar-photo{padding:0}
+.group-member-info{display:flex;flex-direction:column;min-width:0;flex:1}
+.group-member-info b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.group-member-info span{font-size:10px;color:#697184;margin-top:2px}
+.group-online-dot{width:8px;height:8px;min-width:8px;border-radius:50%;background:#4b5261}
+.group-online-dot.online{background:#39d98a;box-shadow:0 0 0 3px rgba(57,217,138,.10)}
+@media (max-width:850px){.dm-layout{grid-template-columns:minmax(0,1fr) 190px}}
+@media (max-width:600px){.dm-layout{grid-template-columns:minmax(0,1fr)}.group-members-panel{display:none!important}}
