@@ -1760,6 +1760,7 @@ async function sendDM() {
     }
 
     input.value = "";
+    if (fileInput) fileInput.value = "";
     luxTypingSend(false);
 
     const target =
