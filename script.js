@@ -468,6 +468,8 @@ function bind() {
 
     $("save-user-profile-notes")?.addEventListener("click", saveUserProfileNotes);
 
+    $("add-profile-friend")?.addEventListener("click", addProfileFriend);
+
     $("profile-avatar-file")?.addEventListener("change", (event) => {
         const file = event.target.files?.[0];
         if (file) openAvatarCrop(file);
@@ -1971,9 +1973,126 @@ async function openUserProfile(userId) {
     const notes = await sb.from("profile_notes").select("notes").eq("user_id", session.user.id).eq("profile_id", userId).maybeSingle();
     $("user-profile-notes").value = notes.data?.notes || "";
     $("user-profile-notes-status").textContent = "";
+
+    const friendButton = $("add-profile-friend");
+    const friendStatus = $("add-profile-friend-status");
+    if (friendButton && friendStatus) {
+        friendButton.disabled = true;
+        friendButton.textContent = "Loading...";
+        friendStatus.textContent = "";
+
+        const friendship = await sb
+            .from("friendships")
+            .select("id,requester,addressee,status")
+            .or(`and(requester.eq.${session.user.id},addressee.eq.${userId}),and(requester.eq.${userId},addressee.eq.${session.user.id})`)
+            .maybeSingle();
+
+        friendButton.disabled = false;
+        friendButton.dataset.profileId = userId;
+
+        if (friendship.data?.status === "accepted") {
+            friendButton.textContent = "Friends";
+            friendButton.disabled = true;
+        } else if (friendship.data?.requester === session.user.id) {
+            friendButton.textContent = "Request Sent";
+            friendButton.disabled = true;
+        } else if (friendship.data?.addressee === session.user.id) {
+            friendButton.textContent = "Accept Request";
+            friendButton.disabled = false;
+            friendButton.dataset.friendshipId = friendship.data.id;
+        } else {
+            friendButton.textContent = "Add Friend";
+        }
+    }
+
     $("user-profile-modal").dataset.profileId = userId;
     open("user-profile-modal");
 }
+
+async function addProfileFriend() {
+    if (!session) return;
+
+    const button = $("add-profile-friend");
+    const status = $("add-profile-friend-status");
+    const profileId = button?.dataset.profileId;
+    const friendshipId = button?.dataset.friendshipId;
+    if (!button || !profileId) return;
+
+    button.disabled = true;
+    status.textContent = "";
+
+    if (friendshipId) {
+        const accepted = await sb
+            .from("friendships")
+            .update({ status: "accepted" })
+            .eq("id", friendshipId)
+            .eq("addressee", session.user.id)
+            .select()
+            .single();
+
+        if (accepted.error) {
+            status.textContent = accepted.error.message;
+            button.disabled = false;
+            return;
+        }
+
+        await notify(
+            accepted.data.requester,
+            "friend_accept",
+            "Friend request accepted",
+            `${me.username} accepted your friend request.`
+        );
+
+        button.textContent = "Friends";
+        status.textContent = "Friend request accepted.";
+        await loadFriends();
+        return;
+    }
+
+    const existing = await sb
+        .from("friendships")
+        .select("id,status")
+        .or(
+            `and(requester.eq.${session.user.id},addressee.eq.${profileId}),and(requester.eq.${profileId},addressee.eq.${session.user.id})`
+        )
+        .maybeSingle();
+
+    if (existing.error) {
+        status.textContent = existing.error.message;
+        button.disabled = false;
+        return;
+    }
+
+    if (existing.data) {
+        button.textContent = existing.data.status === "accepted" ? "Friends" : "Request Sent";
+        button.disabled = true;
+        return;
+    }
+
+    const result = await sb
+        .from("friendships")
+        .insert({
+            requester: session.user.id,
+            addressee: profileId
+        });
+
+    if (result.error) {
+        status.textContent = result.error.message;
+        button.disabled = false;
+        return;
+    }
+
+    await notify(
+        profileId,
+        "friend_request",
+        "New friend request",
+        `${me.username} sent you a friend request.`
+    );
+
+    button.textContent = "Request Sent";
+    status.textContent = "Friend request sent.";
+    button.disabled = true;
+};
 
 async function saveUserProfileNotes() {
     const profileId = $("user-profile-modal")?.dataset.profileId;
