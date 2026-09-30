@@ -2022,7 +2022,6 @@ function luxRenderPresence(){
     });
 
     if(dm){
-        const onclick=document.querySelector('[onclick*="openDM(\\\''+dm.user_a+'\\\'"]')||document.querySelector('[onclick*="openDM(\\\''+dm.user_b+'\\\'"]');
         const otherId=String(dm.user_a)===String(session?.user?.id)?dm.user_b:dm.user_a;
         const status=$("dm-conversation-status");
         if(status)status.textContent=luxIsOnline(otherId)?"Online now":"Offline";
