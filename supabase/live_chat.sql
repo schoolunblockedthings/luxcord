@@ -212,10 +212,11 @@ to authenticated
 using (group_id in (select private.user_group_ids()));
 
 drop policy if exists "Group creators can add members" on public.group_members;
-create policy "Group creators can add members"
+drop policy if exists "Group members can add members" on public.group_members;
+create policy "Group members can add members"
 on public.group_members for insert
 to authenticated
-with check (private.group_created_by_me(group_id));
+with check (group_id in (select private.user_group_ids()));
 
 drop policy if exists "Group members can read messages" on public.group_messages;
 create policy "Group members can read messages"
