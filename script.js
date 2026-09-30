@@ -1303,6 +1303,14 @@ window.openDM = async function (id) {
 
     dm = result.data;
 
+    const otherProfile = await sb.from("profiles").select("id,username,display_name,last_seen_at").eq("id", id).maybeSingle();
+    const other = otherProfile.data || {};
+    const otherName = other.display_name || other.username || "User";
+    if ($("dm-conversation-name")) $("dm-conversation-name").textContent = otherName;
+    if ($("dm-conversation-avatar")) $("dm-conversation-avatar").textContent = otherName[0]?.toUpperCase() || "?";
+    if ($("dm-conversation-status")) $("dm-conversation-status").textContent = luxIsOnline?.(id) ? "Online now" : "Direct message";
+    open("dm-conversation-head");
+
     view("dms");
 
     open("dm-messages");
