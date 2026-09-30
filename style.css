@@ -1752,3 +1752,11 @@ button {
     #dm-messages .message-actions,
     #chat-display .message-actions{opacity:1}
 }
+
+
+/* Profile photos */
+.avatar-photo { overflow: hidden; padding: 0; }
+.avatar-photo img { width:100%; height:100%; display:block; object-fit:cover; border-radius:inherit; }
+.message-avatar.avatar-photo { border-radius:50%; }
+.person-card .avatar-photo { flex:0 0 auto; }
+#me-avatar.avatar-photo { border-radius:12px; }
