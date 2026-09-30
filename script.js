@@ -44,6 +44,140 @@ const close = (id) => {
     $(id)?.classList.add("hidden");
 };
 
+const luxMentionState = new Map();
+
+function hideMentionDropdown(dropdownId) {
+    const dropdown = $(dropdownId);
+    if (dropdown) {
+        dropdown.innerHTML = "";
+        dropdown.classList.add("hidden");
+    }
+}
+
+async function updateMentionDropdown(inputId, dropdownId) {
+    const input = $(inputId);
+    const dropdown = $(dropdownId);
+    if (!input || !dropdown) return;
+
+    const before = input.value.slice(0, input.selectionStart ?? input.value.length);
+    const match = before.match(/(?:^|\s)@([a-zA-Z0-9_.-]*)$/);
+    if (!match) {
+        hideMentionDropdown(dropdownId);
+        return;
+    }
+
+    const query = match[1] || "";
+    let request = sb.from("profiles")
+        .select("id,username,display_name,avatar_url")
+        .neq("id", session?.user?.id || "");
+
+    if (query) {
+        request = request.or("username.ilike.%" + query + "%,display_name.ilike.%" + query + "%");
+    }
+
+    const result = await request.order("username", { ascending: true }).limit(20);
+    const profiles = result.data || [];
+
+    if (!profiles.length) {
+        dropdown.innerHTML = '<div class="mention-empty">No people found.</div>';
+        dropdown.classList.remove("hidden");
+        return;
+    }
+
+    luxMentionState.set(inputId, { start: before.length - query.length - 1 });
+
+    dropdown.innerHTML = profiles.map(profile => {
+        const name = profile.display_name || profile.username || "User";
+        return '<button type="button" class="mention-option" data-mention-user="' +
+            esc(profile.id) + '" data-mention-username="' + esc(profile.username || "") + '">' +
+            avatarHTML(profile, "mention-avatar") +
+            '<span class="mention-option-text"><b>' + esc(name) + '</b><small>@' +
+            esc(profile.username || "user") + '</small></span></button>';
+    }).join("");
+    dropdown.classList.remove("hidden");
+}
+
+function chooseMention(inputId, dropdownId, userId, username) {
+    const input = $(inputId);
+    if (!input || !username) return;
+
+    const state = luxMentionState.get(inputId);
+    const cursor = input.selectionStart ?? input.value.length;
+    const start = state?.start ?? cursor;
+
+    input.value = input.value.slice(0, start) + "@" + username + " " + input.value.slice(cursor);
+    const nextCursor = start + username.length + 2;
+    input.focus();
+    input.setSelectionRange(nextCursor, nextCursor);
+    hideMentionDropdown(dropdownId);
+    luxTypingSend(true);
+}
+
+function bindMentionInput(inputId, dropdownId) {
+    const input = $(inputId);
+    const dropdown = $(dropdownId);
+    if (!input || !dropdown) return;
+
+    input.addEventListener("input", () => updateMentionDropdown(inputId, dropdownId));
+    input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            hideMentionDropdown(dropdownId);
+            return;
+        }
+        if (event.key === "Enter" && !event.shiftKey && !settings.enter_send && !dropdown.classList.contains("hidden")) {
+            event.preventDefault();
+            const first = dropdown.querySelector("[data-mention-user]");
+            if (first) chooseMention(inputId, dropdownId, first.dataset.mentionUser, first.dataset.mentionUsername);
+        }
+    });
+
+    dropdown.addEventListener("mousedown", (event) => {
+        const option = event.target.closest("[data-mention-user]");
+        if (!option) return;
+        event.preventDefault();
+        chooseMention(inputId, dropdownId, option.dataset.mentionUser, option.dataset.mentionUsername);
+    });
+}
+
+async function loadMentionProfiles(messages) {
+    const usernames = [...new Set(
+        (messages || []).flatMap(message =>
+            [...String(message.message || "").matchAll(/@([a-zA-Z0-9_.-]{3,32})/g)].map(match => match[1])
+        )
+    )];
+    if (!usernames.length) return new Map();
+
+    const result = await sb.from("profiles")
+        .select("id,username,display_name,avatar_url")
+        .in("username", usernames);
+
+    return new Map((result.data || []).map(profile => [String(profile.username).toLowerCase(), profile]));
+}
+
+function renderMentionText(value, mentionMap) {
+    const text = String(value ?? "");
+    if (!mentionMap?.size) return esc(text);
+
+    const regex = /@([a-zA-Z0-9_.-]{3,32})/g;
+    let output = "";
+    let last = 0;
+    let match;
+
+    while ((match = regex.exec(text))) {
+        output += esc(text.slice(last, match.index));
+        const profile = mentionMap.get(match[1].toLowerCase());
+        if (profile) {
+            output += '<span class="mention-link" onclick="openUserProfile(\'' +
+                esc(profile.id) + '\')">@' + esc(profile.username) + '</span>';
+        } else {
+            output += esc(match[0]);
+        }
+        last = regex.lastIndex;
+    }
+
+    return output + esc(text.slice(last));
+}
+
 
 // =============================
 // APP BOOT / AUTH
@@ -381,6 +515,9 @@ function bind() {
         sendDM
     );
 
+    bindMentionInput("message-input", "room-mention-dropdown");
+    bindMentionInput("dm-input", "dm-mention-dropdown");
+
     $("dm-attach")?.addEventListener("click", () => $("dm-file")?.click());
     $("dm-file")?.addEventListener("change", () => $("dm-input")?.focus());
 
@@ -553,6 +690,7 @@ async function refreshRoom() {
     }
 
     const messages = result.data || [];
+    const roomMentionProfiles = await loadMentionProfiles(messages);
 
     const roomUserIds = [
         ...new Set(
@@ -669,7 +807,7 @@ async function refreshRoom() {
                             }
 
                             <div class="message-text">
-                                ${esc(message.message)}
+                                ${renderMentionText(message.message, roomMentionProfiles)}
                             </div>
 
                             <div class="message-actions">
@@ -816,7 +954,6 @@ async function sendRoom() {
     }
 
     input.value = "";
-    if (fileInput) fileInput.value = "";
     luxTypingSend(false);
 
     if ($("char-counter")) {
@@ -1492,6 +1629,7 @@ async function refreshDM() {
         }
 
         const messages = result.data || [];
+        const dmMentionProfiles = await loadMentionProfiles(messages);
 
         const ids = [
             ...new Set(
@@ -1649,7 +1787,7 @@ async function refreshDM() {
                 line-height:19px;
                 text-align:left;
             "
-        >${esc(message.message)}</div>
+        >${renderMentionText(message.message, dmMentionProfiles)}</div>
 
         ${message.attachment_url ? ("<a class=\"message-attachment-file\" href=\"" + esc(message.attachment_url) + "\" target=\"_blank\" rel=\"noopener\">📎 " + esc(message.attachment_name || "Download attachment") + "</a>") : ""}
 
