@@ -197,7 +197,7 @@ drop policy if exists "Group members can read groups" on public.group_conversati
 create policy "Group members can read groups"
 on public.group_conversations for select
 to authenticated
-using (id in (select private.user_group_ids()));
+using (created_by = (select auth.uid()) or id in (select private.user_group_ids()));
 
 drop policy if exists "Users can create groups" on public.group_conversations;
 create policy "Users can create groups"
