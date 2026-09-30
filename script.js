@@ -1995,6 +1995,24 @@ setInterval(() => {
     }
 }, 2000);
 
+
+/* LIVE CHAT ENHANCEMENTS */
+let luxPresenceChannel=null,luxDMChannel=null,luxTypingTimer=null,luxTypingUsers=new Set();
+function luxRegisterNotifications(){if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(console.warn);}
+async function luxMarkDMRead(){if(!dm||!session||$("dms-view")?.classList.contains("hidden"))return;const r=await sb.rpc("mark_dm_messages_read",{p_conversation_id:dm.id});if(r.error)console.warn("DM read receipt:",r.error.message);}
+function luxPresenceSetup(){if(!session)return;if(luxPresenceChannel)sb.removeChannel(luxPresenceChannel);luxPresenceChannel=sb.channel("luxcord-presence",{config:{presence:{key:session.user.id}}}).on("presence",{event:"sync"},luxRenderPresence).on("presence",{event:"join"},luxRenderPresence).on("presence",{event:"leave"},luxRenderPresence).subscribe(async s=>{if(s==="SUBSCRIBED"){await luxPresenceChannel.track({user_id:session.user.id,username:me?.username||"User",tab_open:true});luxRenderPresence();}});}
+function luxIsOnline(id){if(!luxPresenceChannel)return false;return Object.values(luxPresenceChannel.presenceState()).some(es=>es.some(e=>e.user_id===id&&e.tab_open));}
+function luxRenderPresence(){document.querySelectorAll(".side-item").forEach(el=>{const name=el.getAttribute("onclick")||"";const m=name.match(/openDM\('([^']+)'\)/);const dot=el.querySelector(".dm-online-dot");if(m&&dot)dot.textContent=luxIsOnline(m[1])?"●":"○";});}
+function luxSubscribeDM(){if(!dm||!session)return;if(luxDMChannel)sb.removeChannel(luxDMChannel);luxTypingUsers.clear();luxDMChannel=sb.channel("luxcord-dm-live-"+dm.id).on("broadcast",{event:"typing"},({payload})=>{if(!payload||payload.user_id===session.user.id)return;if(payload.typing)luxTypingUsers.add(payload.user_id);else luxTypingUsers.delete(payload.user_id);const label=$("dm-typing-label");if(label)label.textContent=luxTypingUsers.size?"Typing…":"";}).on("postgres_changes",{event:"*",schema:"public",table:"dm_messages",filter:"conversation_id=eq."+dm.id},()=>{refreshDM();luxMarkDMRead();}).subscribe();}
+async function luxSendTyping(t){if(luxDMChannel&&session)await luxDMChannel.send({type:"broadcast",event:"typing",payload:{user_id:session.user.id,typing:t}});}
+const luxOriginalOpenDM=window.openDM;window.openDM=async function(id){await luxOriginalOpenDM(id);luxSubscribeDM();await luxMarkDMRead();};
+const luxOriginalSetupRealtime=setupRealtime;setupRealtime=function(){luxOriginalSetupRealtime();luxPresenceSetup();sb.channel("luxcord-desktop-"+session.user.id).on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications",filter:"user_id=eq."+session.user.id},async p=>{if(p.new?.notification_type!=="dm"||!settings.notifications||!("Notification"in window)||Notification.permission!=="granted")return;const data=p.new.notification_data||{};if(dm&&String(dm.id)===String(data.conversation_id)&&!$("dms-view")?.classList.contains("hidden"))return;const reg=await navigator.serviceWorker?.ready.catch(()=>null);if(reg)await reg.showNotification(p.new.notification_title||"New direct message",{body:p.new.notification_body||"You received a message.",tag:"luxcord-dm-"+(data.conversation_id||data.sender_id),renotify:true,data,actions:[{action:"reply",title:"Reply"},{action:"open",title:"Open"}]});}).subscribe();};
+function luxBindTyping(){const input=$("dm-input");if(!input||input.dataset.luxTyping)return;input.dataset.luxTyping="1";input.addEventListener("input",()=>{luxSendTyping(true);clearTimeout(luxTypingTimer);luxTypingTimer=setTimeout(()=>luxSendTyping(false),1200);});input.addEventListener("blur",()=>luxSendTyping(false));}
+setInterval(luxBindTyping,500);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&dm)luxMarkDMRead();});
+window.addEventListener("pagehide",()=>{try{luxPresenceChannel?.untrack();if(luxDMChannel)sb.removeChannel(luxDMChannel);}catch(_){}});
+luxRegisterNotifications();
+
 // =============================
 // START
 // =============================
