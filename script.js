@@ -1426,7 +1426,15 @@ window.openDM = async function (id) {
     const dmProfile = targetProfile.data || { id, display_name: "User" };
     if ($("dm-conversation-name")) $("dm-conversation-name").textContent = dmProfile.display_name || dmProfile.username || "User";
     if ($("dm-conversation-status")) $("dm-conversation-status").textContent = dmProfile.status || "Direct message";
-    if ($("dm-conversation-avatar")) $("dm-conversation-avatar").innerHTML = avatarHTML(dmProfile, "avatar");
+    if ($("dm-conversation-avatar")) {
+        $("dm-conversation-avatar").innerHTML = avatarHTML(dmProfile, "avatar");
+        $("dm-conversation-avatar").onclick = () => openUserProfile(id);
+        $("dm-conversation-avatar").style.cursor = "pointer";
+    }
+    if ($("dm-conversation-name")) {
+        $("dm-conversation-name").onclick = () => openUserProfile(id);
+        $("dm-conversation-name").style.cursor = "pointer";
+    }
     luxTypingContextChanged();
 
     view("dms");
