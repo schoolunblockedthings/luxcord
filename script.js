@@ -1804,14 +1804,11 @@ window.leaveGroup = async function(event) {
     const button = $("group-leave");
     if (button) { button.disabled = true; button.textContent = "Leaving..."; }
 
-    const result = await sb.from("group_members")
-        .delete()
-        .eq("group_id", groupId)
-        .eq("user_id", session.user.id);
+    const result = await sb.rpc("leave_group", { p_group_id: groupId });
 
-    if (result.error) {
+    if (result.error || result.data !== true) {
         if (button) { button.disabled = false; button.textContent = "Leave group"; }
-        alert("Could not leave group: " + result.error.message);
+        alert("Could not leave group: " + (result.error?.message || "You are not a member of this group."));
         return;
     }
 
