@@ -420,6 +420,7 @@
                         </div>
                     </div>
                     <div id="group-members"></div>
+                    <button id="group-add-people" class="group-add-people" type="button">＋ Add people</button>
                 </aside>
 
             </div>
@@ -427,7 +428,21 @@
         </section>
 
 
-        <!-- ROOM -->
+        <div id="group-add-modal" class="modal hidden">
+    <div class="modal-card group-create-card">
+        <button class="x modal-close" type="button">×</button>
+        <h2>Add people</h2>
+        <p class="muted">Choose friends to add to this group.</p>
+        <div id="group-add-friends" class="group-create-friends"></div>
+        <div id="group-add-error" class="group-create-error"></div>
+        <div class="group-create-actions">
+            <button id="group-add-cancel" class="secondary" type="button">Cancel</button>
+            <button id="group-add-submit" class="primary" type="button">Add people</button>
+        </div>
+    </div>
+</div>
+
+<!-- ROOM -->
         <section
             id="room-view"
             class="view hidden"
