@@ -1749,7 +1749,7 @@ async function sendDM() {
         .insert({
             conversation_id: dm.id,
             sender_id: session.user.id,
-            message: text,
+            message: text || attachment?.name || "Attachment",
             attachment_url: attachment?.url || null,
             attachment_name: attachment?.name || null
         });
