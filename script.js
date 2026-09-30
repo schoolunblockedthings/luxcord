@@ -381,6 +381,9 @@ function bind() {
         sendDM
     );
 
+    $("dm-attach")?.addEventListener("click", () => $("dm-file")?.click());
+    $("dm-file")?.addEventListener("change", () => $("dm-input")?.focus());
+
     $("dm-input")?.addEventListener(
         "input",
         () => luxTypingSend(true)
@@ -813,6 +816,7 @@ async function sendRoom() {
     }
 
     input.value = "";
+    if (fileInput) fileInput.value = "";
     luxTypingSend(false);
 
     if ($("char-counter")) {
@@ -1647,6 +1651,8 @@ async function refreshDM() {
             "
         >${esc(message.message)}</div>
 
+        ${message.attachment_url ? ("<a class=\"message-attachment-file\" href=\"" + esc(message.attachment_url) + "\" target=\"_blank\" rel=\"noopener\">📎 " + esc(message.attachment_name || "Download attachment") + "</a>") : ""}
+
         <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${message.sender_id === session.user.id ? (message.read_at ? "Seen" : "Sent") : ""}</div>
 
         <div
@@ -1706,6 +1712,16 @@ async function refreshDM() {
 }
 
 
+async function uploadDMFile(file) {
+    if (!session || !dm || !file) return null;
+    if (file.size > 25 * 1024 * 1024) { alert("Files must be 25 MB or smaller."); return null; }
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = "chat/" + session.user.id + "/" + Date.now() + "-" + safeName;
+    const upload = await sb.storage.from("luxcord-attachments").upload(path, file, { cacheControl: "3600", upsert: false, contentType: file.type || "application/octet-stream" });
+    if (upload.error) { alert(upload.error.message); return null; }
+    return { url: sb.storage.from("luxcord-attachments").getPublicUrl(path).data.publicUrl, name: file.name };
+}
+
 async function sendDM() {
     if (!dm || !session) {
         return;
@@ -1717,11 +1733,15 @@ async function sendDM() {
         return;
     }
 
-    const text =
-        input.value.trim();
+    const text = input.value.trim();
+    const fileInput = $("dm-file");
+    const file = fileInput?.files?.[0] || null;
+    if (!text && !file) return;
 
-    if (!text) {
-        return;
+    let attachment = null;
+    if (file) {
+        attachment = await uploadDMFile(file);
+        if (!attachment) return;
     }
 
     const result = await sb
@@ -1729,7 +1749,9 @@ async function sendDM() {
         .insert({
             conversation_id: dm.id,
             sender_id: session.user.id,
-            message: text
+            message: text,
+            attachment_url: attachment?.url || null,
+            attachment_name: attachment?.name || null
         });
 
     if (result.error) {
