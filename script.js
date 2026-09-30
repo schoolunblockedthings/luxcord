@@ -2026,6 +2026,21 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden&&dm)luxMar
 window.addEventListener("pagehide",()=>{try{luxPresenceChannel?.untrack();if(luxDMChannel)sb.removeChannel(luxDMChannel);}catch(_){}});
 luxRegisterNotifications();
 
+
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", event => {
+        if (event.data?.type !== "luxcord-notification") return;
+        const data = event.data.data || {};
+        if (data.sender_id) {
+            window.openDM(data.sender_id).then(() => {
+                if (event.data.action === "reply") {
+                    setTimeout(() => $("dm-input")?.focus(), 150);
+                }
+            });
+        }
+    });
+}
+
 // =============================
 // START
 // =============================
