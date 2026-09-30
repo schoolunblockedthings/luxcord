@@ -318,6 +318,16 @@ function bind() {
         saveProfile
     );
 
+    $("profile-avatar-zoom")?.addEventListener(
+        "input",
+        (event) => {
+            const zoom = Number(event.target.value) || 100;
+            $("profile-avatar-zoom-value").textContent = zoom + "%";
+            localStorage.setItem("luxcord_avatar_zoom", String(zoom));
+            document.documentElement.style.setProperty("--luxcord-avatar-zoom", String(zoom / 100));
+        }
+    );
+
     $("save-settings")?.addEventListener(
         "click",
         saveSettings
@@ -1757,6 +1767,13 @@ function openProfile() {
     $("profile-bio").value =
         me.bio || "";
     if ($("profile-avatar-file")) $("profile-avatar-file").value = "";
+
+    const zoom = Number(localStorage.getItem("luxcord_avatar_zoom") || "100");
+    if ($("profile-avatar-zoom")) {
+        $("profile-avatar-zoom").value = String(zoom);
+        $("profile-avatar-zoom-value").textContent = zoom + "%";
+        document.documentElement.style.setProperty("--luxcord-avatar-zoom", String(zoom / 100));
+    }
 
     open("profile-modal");
 }
