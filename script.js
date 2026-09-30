@@ -13,6 +13,7 @@ let me = null;
 let room = params.get("room");
 let reply = null;
 let dm = null;
+let groupChat = null;
 let luxAvatarCrop = null;
 
 let settings = {
@@ -210,6 +211,7 @@ async function boot() {
         await Promise.all([
             loadFriends(),
             loadDMs(),
+            loadGroupChats(),
             loadNotifications()
         ]);
     } else {
@@ -384,6 +386,8 @@ function bind() {
         "click",
         createRoom
     );
+
+    $("new-group-chat")?.addEventListener("click", createGroupChat);
 
     $("home-room")?.addEventListener(
         "click",
@@ -599,6 +603,7 @@ function view(viewName) {
 
     if (viewName === "dms") {
         loadDMs();
+        loadGroupChats();
     }
 }
 
@@ -1471,100 +1476,147 @@ async function clearNotifications() {
 // =============================
 
 async function loadDMs() {
-    if (!session) {
-        return;
-    }
+    if (!session) return;
 
-    const result = await sb
-        .from("friendships")
+    const result = await sb.from("friendships")
         .select("*")
-        .or(
-            `requester.eq.${session.user.id},addressee.eq.${session.user.id}`
-        )
+        .or(`requester.eq.${session.user.id},addressee.eq.${session.user.id}`)
         .eq("status", "accepted");
 
-    const ids = [
-        ...(result.data || []).map((friendship) =>
-            friendship.requester === session.user.id
-                ? friendship.addressee
-                : friendship.requester
-        )
-    ];
+    const ids = [...new Set((result.data || []).map((friendship) =>
+        friendship.requester === session.user.id ? friendship.addressee : friendship.requester
+    ))];
 
     let profiles = [];
-
     if (ids.length) {
-        const profileResult = await sb
-            .from("profiles")
+        const profileResult = await sb.from("profiles")
             .select("id,username,display_name,bio,avatar_url")
             .in("id", ids);
-
         profiles = profileResult.data || [];
     }
 
-    const dmListHTML =
-        profiles
-            .map((profile) => {
-                const name =
-                    profile.display_name ||
-                    profile.username ||
-                    "User";
-
-                return `
-                    <div
-                        class="side-item"
-                        data-dm-user-id="${profile.id}"
-                        onclick="openDM('${profile.id}')"
-                    >
-                        <span onclick="event.stopPropagation(); openUserProfile('${profile.id}')" class="clickable-avatar">${avatarHTML(profile)}</span><span class="lux-online-dot" title="Offline">○</span>
-                        <span onclick="event.stopPropagation(); openUserProfile('${profile.id}')" class="clickable-name">${esc(name)}</span>
-                    </div>
-                `;            })
-            .join("") ||
-        `
-            <div
-                class="muted"
-                style="padding:10px"
-            >
-                Add friends to start DMs.
+    const dmListHTML = profiles.map((profile) => {
+        const name = profile.display_name || profile.username || "User";
+        return `
+            <div class="side-item" data-dm-user-id="${esc(profile.id)}" onclick="openDM('${esc(profile.id)}')">
+                <span onclick="event.stopPropagation(); openUserProfile('${esc(profile.id)}')" class="clickable-avatar">${avatarHTML(profile)}</span>
+                <span class="lux-online-dot" title="Offline">○</span>
+                <span onclick="event.stopPropagation(); openUserProfile('${esc(profile.id)}')" class="clickable-name">${esc(name)}</span>
             </div>
         `;
+    }).join("") || '<div class="muted" style="padding:10px">Add friends to start DMs.</div>';
 
-    if ($("dm-people")) {
-        $("dm-people").innerHTML = dmListHTML;
-    }
-
-    if ($("dm-people-main")) {
-        $("dm-people-main").innerHTML = dmListHTML;
-    }
+    if ($("dm-people")) $("dm-people").innerHTML = dmListHTML;
+    luxRenderOnline();
 }
 
-window.openDM = async function (id) {
-    if (!session) {
+async function loadGroupChats() {
+    if (!session || !$("group-people")) return;
+
+    const memberships = await sb.from("group_members").select("group_id").eq("user_id", session.user.id);
+    if (memberships.error) {
+        $("group-people").innerHTML = '<div class="muted group-empty">Run the group chat SQL setup first.</div>';
         return;
     }
 
-    const users = [
-        session.user.id,
-        id
-    ].sort();
+    const groupIds = [...new Set((memberships.data || []).map((row) => row.group_id))];
+    if (!groupIds.length) {
+        $("group-people").innerHTML = '<div class="muted group-empty">No group chats yet.</div>';
+        return;
+    }
 
-    let result = await sb
-        .from("dm_conversations")
-        .select("*")
-        .eq("user_a", users[0])
-        .eq("user_b", users[1])
-        .maybeSingle();
+    const groupsResult = await sb.from("group_conversations")
+        .select("id,name,created_by")
+        .in("id", groupIds)
+        .order("created_at", { ascending: false });
+
+    if (groupsResult.error) {
+        $("group-people").innerHTML = '<div class="muted group-empty">Run the group chat SQL setup first.</div>';
+        return;
+    }
+
+    const countResult = await sb.from("group_members").select("group_id").in("group_id", groupIds);
+    const counts = {};
+    (countResult.data || []).forEach((row) => { counts[row.group_id] = (counts[row.group_id] || 0) + 1; });
+
+    $("group-people").innerHTML = (groupsResult.data || []).map((group) => `
+        <div class="side-item group-side-item" onclick="openGroupChat('${esc(group.id)}')">
+            <span class="group-icon">#</span>
+            <span class="group-side-name">${esc(group.name)}</span>
+            <span class="group-side-count">${counts[group.id] || 0}</span>
+        </div>
+    `).join("") || '<div class="muted group-empty">No group chats yet.</div>';
+}
+
+async function createGroupChat() {
+    if (!session) return;
+
+    const name = prompt("Group name");
+    if (!name?.trim()) return;
+
+    const rawUsers = prompt("Enter member usernames separated by commas");
+    const usernames = [...new Set((rawUsers || "")
+        .split(",")
+        .map((value) => value.trim().replace(/^@/, ""))
+        .filter(Boolean))];
+
+    if (!usernames.length) {
+        alert("Add at least one other member by username.");
+        return;
+    }
+
+    const result = await sb.from("profiles")
+        .select("id,username,display_name,avatar_url")
+        .in("username", usernames)
+        .neq("id", session.user.id);
+
+    if (result.error) {
+        alert(result.error.message);
+        return;
+    }
+
+    const profiles = result.data || [];
+    if (!profiles.length) {
+        alert("None of those usernames were found.");
+        return;
+    }
+
+    const groupResult = await sb.from("group_conversations")
+        .insert({ name: name.trim().slice(0, 80), created_by: session.user.id })
+        .select()
+        .single();
+
+    if (groupResult.error) {
+        alert(groupResult.error.message);
+        return;
+    }
+
+    const memberIds = [...new Set([session.user.id, ...profiles.map((profile) => profile.id)])];
+    const memberResult = await sb.from("group_members").insert(memberIds.map((userId) => ({
+        group_id: groupResult.data.id,
+        user_id: userId,
+        added_by: session.user.id
+    })));
+
+    if (memberResult.error) {
+        alert(memberResult.error.message);
+        return;
+    }
+
+    await loadGroupChats();
+    await openGroupChat(groupResult.data.id);
+}
+
+window.openDM = async function (id) {
+    if (!session) return;
+
+    const users = [session.user.id, id].sort();
+    let result = await sb.from("dm_conversations").select("*")
+        .eq("user_a", users[0]).eq("user_b", users[1]).maybeSingle();
 
     if (!result.data) {
-        result = await sb
-            .from("dm_conversations")
-            .insert({
-                user_a: users[0],
-                user_b: users[1]
-            })
-            .select()
-            .single();
+        result = await sb.from("dm_conversations")
+            .insert({ user_a: users[0], user_b: users[1] }).select().single();
     }
 
     if (result.error) {
@@ -1573,28 +1625,27 @@ window.openDM = async function (id) {
     }
 
     dm = result.data;
+    groupChat = null;
+    close("group-members-panel");
+    close("dm-reply-bar");
+    open("dm-conversation-head");
+    $("dm-attach").style.display = "";
+    $("dm-input").placeholder = "Message...";
 
-    const targetProfile = await sb
-        .from("profiles")
-        .select("id,username,display_name,status,bio,avatar_url")
-        .eq("id", id)
-        .maybeSingle();
+    const targetProfile = await sb.from("profiles")
+        .select("id,username,display_name,status,bio,avatar_url").eq("id", id).maybeSingle();
     const dmProfile = targetProfile.data || { id, display_name: "User" };
-    if ($("dm-conversation-name")) $("dm-conversation-name").textContent = dmProfile.display_name || dmProfile.username || "User";
-    if ($("dm-conversation-status")) $("dm-conversation-status").textContent = dmProfile.status || "Direct message";
-    if ($("dm-conversation-avatar")) {
-        $("dm-conversation-avatar").innerHTML = avatarHTML(dmProfile, "avatar");
-        $("dm-conversation-avatar").onclick = () => openUserProfile(id);
-        $("dm-conversation-avatar").style.cursor = "pointer";
-    }
-    if ($("dm-conversation-name")) {
-        $("dm-conversation-name").onclick = () => openUserProfile(id);
-        $("dm-conversation-name").style.cursor = "pointer";
-    }
+
+    $("dm-conversation-name").textContent = dmProfile.display_name || dmProfile.username || "User";
+    $("dm-conversation-status").textContent = luxIsOnline(id) ? "Online now" : "Direct message";
+    $("dm-conversation-avatar").innerHTML = avatarHTML(dmProfile, "avatar");
+    $("dm-conversation-avatar").onclick = () => openUserProfile(id);
+    $("dm-conversation-avatar").style.cursor = "pointer";
+    $("dm-conversation-name").onclick = () => openUserProfile(id);
+    $("dm-conversation-name").style.cursor = "pointer";
+
     luxTypingContextChanged();
-
     view("dms");
-
     open("dm-messages");
     open("dm-composer");
     close("dm-empty");
@@ -1603,10 +1654,78 @@ window.openDM = async function (id) {
     await luxMarkDMRead();
 };
 
+window.openGroupChat = async function (id) {
+    if (!session || !id) return;
+
+    const result = await sb.from("group_conversations").select("id,name,created_by").eq("id", id).maybeSingle();
+    if (result.error || !result.data) {
+        alert(result.error?.message || "Group chat not found.");
+        return;
+    }
+
+    const membership = await sb.from("group_members").select("group_id")
+        .eq("group_id", id).eq("user_id", session.user.id).maybeSingle();
+    if (membership.error || !membership.data) {
+        alert("You are not a member of this group.");
+        return;
+    }
+
+    groupChat = result.data;
+    dm = null;
+    close("dm-empty");
+    close("dm-reply-bar");
+    open("dm-conversation-head");
+    open("dm-messages");
+    open("dm-composer");
+    open("group-members-panel");
+    $("dm-attach").style.display = "none";
+    $("dm-file").value = "";
+    $("dm-input").placeholder = "Message the group...";
+    $("dm-conversation-name").textContent = groupChat.name;
+    $("dm-conversation-status").textContent = "Group chat";
+    $("dm-conversation-avatar").textContent = "#";
+    $("dm-conversation-avatar").onclick = null;
+    $("dm-conversation-avatar").style.cursor = "default";
+    $("dm-conversation-name").onclick = null;
+    $("dm-conversation-name").style.cursor = "default";
+
+    luxTypingContextChanged();
+    view("dms");
+    await refreshGroupChat();
+    await loadGroupMembers(id);
+};
+
+async function loadGroupMembers(groupId) {
+    if (!groupId || !$("group-members")) return;
+
+    const membersResult = await sb.from("group_members").select("user_id").eq("group_id", groupId);
+    const memberIds = (membersResult.data || []).map((row) => row.user_id);
+    const profileResult = memberIds.length
+        ? await sb.from("profiles").select("id,username,display_name,avatar_url").in("id", memberIds)
+        : { data: [] };
+    const profileMap = Object.fromEntries((profileResult.data || []).map((profile) => [profile.id, profile]));
+
+    $("group-member-count").textContent = memberIds.length + (memberIds.length === 1 ? " member" : " members");
+    $("group-members").innerHTML = memberIds.map((id) => {
+        const profile = profileMap[id] || { id, display_name: "User" };
+        const online = luxIsOnline(id);
+        return `
+            <div class="group-member-row" data-group-member-id="${esc(id)}" onclick="openUserProfile('${esc(id)}')">
+                ${avatarHTML(profile, "group-member-avatar")}
+                <div class="group-member-info">
+                    <b>${esc(profile.display_name || profile.username || "User")}</b>
+                    <span data-group-member-status="${esc(id)}">${online ? "Online now" : "Offline"}</span>
+                </div>
+                <i class="group-online-dot ${online ? "online" : ""}" data-group-member-dot="${esc(id)}" title="${online ? "Online now" : "Offline"}"></i>
+            </div>
+        `;
+    }).join("") || '<div class="muted" style="padding:10px">No members.</div>';
+}
 
 let dmRefreshing = false;
 
 async function refreshDM() {
+    if (groupChat) return refreshGroupChat();
     if (!dm || !session || dmRefreshing) {
         return;
     }
@@ -1863,6 +1982,7 @@ async function uploadDMFile(file) {
 }
 
 async function sendDM() {
+    if (groupChat) return sendGroupMessage();
     if (!dm || !session) {
         return;
     }
@@ -1918,6 +2038,72 @@ async function sendDM() {
     await refreshDM();
 }
 
+
+async function refreshGroupChat() {
+    if (!groupChat || !session || dmRefreshing) return;
+    dmRefreshing = true;
+    try {
+        const result = await sb.from("group_messages").select("*")
+            .eq("group_id", groupChat.id).order("created_at", { ascending: true });
+        if (result.error) {
+            console.error("Group message load error:", result.error);
+            return;
+        }
+
+        const messages = result.data || [];
+        const mentionProfiles = await loadMentionProfiles(messages);
+        const senderIds = [...new Set(messages.map((message) => message.sender_id).filter(Boolean))];
+        const profileResult = senderIds.length
+            ? await sb.from("profiles").select("id,username,display_name,avatar_url").in("id", senderIds)
+            : { data: [] };
+        const profileMap = Object.fromEntries((profileResult.data || []).map((profile) => [profile.id, profile]));
+        const container = $("dm-messages");
+        if (!container) return;
+
+        const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+        container.innerHTML = messages.map((message) => {
+            const user = profileMap[message.sender_id] || {};
+            const name = user.display_name || user.username || "User";
+            const time = new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            return `
+                <article class="message" style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;width:100%;margin:0 0 9px;padding:7px 9px;align-items:start">
+                    <div class="message-avatar" style="grid-column:1;grid-row:1;width:36px;height:36px;min-width:36px" onclick="openUserProfile('${esc(message.sender_id)}')">${avatarHTML(user, "message-avatar")}</div>
+                    <div class="message-body" style="grid-column:2;grid-row:1;min-width:0">
+                        <div class="message-head"><b class="clickable-name" onclick="openUserProfile('${esc(message.sender_id)}')">${esc(name)}</b><time>${esc(time)}</time></div>
+                        <div class="message-text">${renderMentionText(message.message, mentionProfiles)}</div>
+                    </div>
+                </article>
+            `;
+        }).join("");
+
+        if (wasNearBottom || messages.length <= 1) container.scrollTop = container.scrollHeight;
+    } finally {
+        dmRefreshing = false;
+    }
+}
+
+async function sendGroupMessage() {
+    if (!groupChat || !session) return;
+    const input = $("dm-input");
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    const result = await sb.from("group_messages").insert({
+        group_id: groupChat.id,
+        sender_id: session.user.id,
+        message: text
+    });
+
+    if (result.error) {
+        alert(result.error.message);
+        return;
+    }
+
+    input.value = "";
+    luxTypingSend(false);
+    await refreshGroupChat();
+}
 
 window.reactDM = async function (
     id,
@@ -2543,6 +2729,16 @@ function setupRealtime() {
             }
         )
 
+        // GROUP MESSAGES
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "group_messages" }, (payload) => {
+            if (groupChat && String(payload.new?.group_id) === String(groupChat.id)) refreshGroupChat();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, (payload) => {
+            const groupId = payload.new?.group_id || payload.old?.group_id;
+            if (groupChat && String(groupId) === String(groupChat.id)) loadGroupMembers(groupChat.id);
+            loadGroupChats();
+        })
+
         // NOTIFICATIONS
         .on(
             "postgres_changes",
@@ -2573,14 +2769,15 @@ let luxTypingChannel = null;
 let luxTypingTimer = null;
 const luxTypingUsers = new Map();
 function luxTypingContext() {
+    if (groupChat) return { kind: "group", id: String(groupChat.id) };
     if (dm) return { kind: "dm", id: String(dm.id) };
     if (room) return { kind: "room", id: String(room) };
     return null;
 }
 function luxTypingRender() {
     const ctx = luxTypingContext();
-    const label = ctx?.kind === "dm" ? $("dm-typing-label") : $("typing-label");
-    const otherLabel = ctx?.kind === "dm" ? $("typing-label") : $("dm-typing-label");
+    const label = (ctx?.kind === "dm" || ctx?.kind === "group") ? $("dm-typing-label") : $("typing-label");
+    const otherLabel = (ctx?.kind === "dm" || ctx?.kind === "group") ? $("typing-label") : $("dm-typing-label");
     if (otherLabel) otherLabel.textContent = "";
     if (!label) return;
     const names = [];
@@ -2646,7 +2843,7 @@ async function luxStartTyping() {
 let luxPresenceChannel = null;
 let luxPresenceReady = false;
 async function luxMarkDMRead() {
-    if (!dm || !session) return;
+    if (!dm || !session || groupChat) return;
     const result = await sb.rpc("mark_dm_messages_read", { p_conversation_id: dm.id });
     if (result.error) { console.warn("DM read receipt:", result.error.message); return; }
     await refreshDM(); await loadDMs();
@@ -2664,6 +2861,15 @@ function luxRenderOnline() {
         dot.textContent = online ? "●" : "○";
         dot.title = online ? "Online now" : "Offline";
         dot.classList.toggle("online", online);
+    });
+
+    document.querySelectorAll("[data-group-member-id]").forEach(item => {
+        const id = item.dataset.groupMemberId;
+        const online = luxIsOnline(id);
+        const status = item.querySelector("[data-group-member-status]");
+        const dot = item.querySelector("[data-group-member-dot]");
+        if (status) status.textContent = online ? "Online now" : "Offline";
+        if (dot) { dot.classList.toggle("online", online); dot.title = online ? "Online now" : "Offline"; }
     });
 
     document.querySelectorAll("[data-profile-status-user-id]").forEach(item => {
@@ -2708,8 +2914,10 @@ setInterval(() => {
 // DM LIVE FALLBACK
 // =============================
 setInterval(async () => {
-    if (session && dm && !$("dms-view")?.classList.contains("hidden")) {
-        await refreshDM(); await luxMarkDMRead();
+    if (session && (dm || groupChat) && !$("dms-view")?.classList.contains("hidden")) {
+        await refreshDM();
+        await luxMarkDMRead();
+        if (groupChat) await loadGroupMembers(groupChat.id);
     }
     luxRenderOnline();
 }, 3000);
@@ -2718,6 +2926,7 @@ document.addEventListener("visibilitychange", async () => {
     if (!session || document.hidden) return;
     if (luxPresenceChannel && luxPresenceReady) await luxPresenceChannel.track({ user_id: session.user.id, tab_open: true });
     if (dm && !$("dms-view")?.classList.contains("hidden")) await luxMarkDMRead();
+    if (groupChat && !$("dms-view")?.classList.contains("hidden")) await loadGroupMembers(groupChat.id);
     luxRenderOnline();
 });
 
