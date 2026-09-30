@@ -91,3 +91,7 @@ with check (bucket_id='luxcord-attachments' and owner_id=auth.uid()::text);
 create policy if not exists "Luxcord attachments read"
 on storage.objects for select to public
 using (bucket_id='luxcord-attachments');
+
+
+alter table public.profiles add column if not exists last_seen_at timestamptz;
+
