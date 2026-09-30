@@ -1848,3 +1848,26 @@ button {
     min-height:18px;
     margin-bottom:7px;
 }
+
+
+/* @mention autocomplete */
+.mention-input-wrap{position:relative;flex:1 1 auto;min-width:0}
+.mention-input-wrap > input{width:100%}
+.mention-dropdown{
+    position:absolute;left:0;right:0;bottom:calc(100% + 8px);z-index:100;
+    max-height:260px;overflow:auto;padding:6px;border:1px solid var(--lx-border);
+    border-radius:12px;background:var(--lx-panel,#171a23);box-shadow:0 16px 35px rgba(0,0,0,.35)
+}
+.mention-option{
+    width:100%;display:flex;align-items:center;gap:10px;padding:8px;border:0;
+    border-radius:9px;background:transparent;color:inherit;text-align:left;cursor:pointer
+}
+.mention-option:hover{background:rgba(255,255,255,.07)}
+.mention-avatar{width:32px;height:32px;min-width:32px;border-radius:50%;overflow:hidden;display:grid;place-items:center}
+.mention-avatar.avatar-photo{padding:0}
+.mention-option-text{display:flex;flex-direction:column;min-width:0}
+.mention-option-text b,.mention-option-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mention-option-text small{color:#858da0}
+.mention-empty{padding:10px;color:#858da0;font-size:13px}
+.mention-link{color:#9d92ff;font-weight:700;cursor:pointer;border-radius:4px}
+.mention-link:hover{text-decoration:underline;background:rgba(157,146,255,.10)}
