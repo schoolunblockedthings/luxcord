@@ -13,6 +13,7 @@ let me = null;
 let room = params.get("room");
 let reply = null;
 let dm = null;
+let luxAvatarCrop = null;
 
 let settings = {
     sound: true,
@@ -318,15 +319,41 @@ function bind() {
         saveProfile
     );
 
-    $("profile-avatar-zoom")?.addEventListener(
-        "input",
-        (event) => {
-            const zoom = Number(event.target.value) || 100;
-            $("profile-avatar-zoom-value").textContent = zoom + "%";
-            localStorage.setItem("luxcord_avatar_zoom", String(zoom));
-            document.documentElement.style.setProperty("--luxcord-avatar-zoom", String(zoom / 100));
-        }
-    );
+    $("profile-avatar-file")?.addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        if (file) openAvatarCrop(file);
+    });
+
+    $("avatar-crop-zoom")?.addEventListener("input", (event) => {
+        setAvatarCropZoom(event.target.value);
+    });
+
+    $("avatar-crop-apply")?.addEventListener("click", applyAvatarCrop);
+    $("avatar-crop-cancel")?.addEventListener("click", cancelAvatarCrop);
+
+    const cropCanvas = $("avatar-crop-canvas");
+    cropCanvas?.addEventListener("pointerdown", (event) => {
+        if (!luxAvatarCrop) return;
+        luxAvatarCrop.dragging = true;
+        luxAvatarCrop.startX = event.clientX;
+        luxAvatarCrop.startY = event.clientY;
+        luxAvatarCrop.originX = luxAvatarCrop.x;
+        luxAvatarCrop.originY = luxAvatarCrop.y;
+        cropCanvas.setPointerCapture(event.pointerId);
+    });
+    cropCanvas?.addEventListener("pointermove", (event) => {
+        if (!luxAvatarCrop?.dragging) return;
+        luxAvatarCrop.x = luxAvatarCrop.originX + event.clientX - luxAvatarCrop.startX;
+        luxAvatarCrop.y = luxAvatarCrop.originY + event.clientY - luxAvatarCrop.startY;
+        clampAvatarCrop();
+        drawAvatarCrop();
+    });
+    cropCanvas?.addEventListener("pointerup", () => {
+        if (luxAvatarCrop) luxAvatarCrop.dragging = false;
+    });
+    cropCanvas?.addEventListener("pointercancel", () => {
+        if (luxAvatarCrop) luxAvatarCrop.dragging = false;
+    });
 
     $("save-settings")?.addEventListener(
         "click",
@@ -1744,6 +1771,146 @@ window.reactDM = async function (
 
 
 // =============================
+// AVATAR CROPPER
+// =============================
+
+function openAvatarCrop(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    if (file.size > 5 * 1024 * 1024) {
+        $("profile-error").textContent = "Profile pictures must be 5 MB or smaller.";
+        return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+        const canvas = $("avatar-crop-canvas");
+        const ctx = canvas.getContext("2d");
+        const size = 420;
+        const fit = Math.max(size / image.width, size / image.height);
+        luxAvatarCrop = {
+            file,
+            url,
+            image,
+            ctx,
+            size,
+            baseScale: fit,
+            zoom: 1,
+            x: size / 2,
+            y: size / 2,
+            dragging: false,
+            startX: 0,
+            startY: 0,
+            originX: 0,
+            originY: 0
+        };
+        $("avatar-crop-zoom").value = "100";
+        $("avatar-crop-zoom-value").textContent = "100%";
+        open("avatar-crop-modal");
+        drawAvatarCrop();
+    };
+    image.onerror = () => {
+        URL.revokeObjectURL(url);
+        $("profile-error").textContent = "That image could not be opened.";
+    };
+    image.src = url;
+}
+
+function drawAvatarCrop() {
+    if (!luxAvatarCrop) return;
+    const {ctx, size, image, baseScale, zoom, x, y} = luxAvatarCrop;
+    const scale = baseScale * zoom;
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = "#080a10";
+    ctx.fillRect(0, 0, size, size);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(
+        image,
+        x - image.width * scale / 2,
+        y - image.height * scale / 2,
+        image.width * scale,
+        image.height * scale
+    );
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,.9)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+}
+
+function clampAvatarCrop() {
+    if (!luxAvatarCrop) return;
+    const {image, baseScale, zoom, size} = luxAvatarCrop;
+    const scale = baseScale * zoom;
+    const halfW = image.width * scale / 2;
+    const halfH = image.height * scale / 2;
+    const radius = size / 2 - 4;
+    luxAvatarCrop.x = Math.min(size - radius + halfW, Math.max(radius - halfW, luxAvatarCrop.x));
+    luxAvatarCrop.y = Math.min(size - radius + halfH, Math.max(radius - halfH, luxAvatarCrop.y));
+}
+
+function setAvatarCropZoom(value) {
+    if (!luxAvatarCrop) return;
+    const oldScale = luxAvatarCrop.baseScale * luxAvatarCrop.zoom;
+    const newZoom = Number(value) / 100;
+    const newScale = luxAvatarCrop.baseScale * newZoom;
+    const center = luxAvatarCrop.size / 2;
+    const ratio = newScale / oldScale;
+    luxAvatarCrop.x = center + (luxAvatarCrop.x - center) * ratio;
+    luxAvatarCrop.y = center + (luxAvatarCrop.y - center) * ratio;
+    luxAvatarCrop.zoom = newZoom;
+    clampAvatarCrop();
+    $("avatar-crop-zoom-value").textContent = value + "%";
+    drawAvatarCrop();
+}
+
+function cancelAvatarCrop() {
+    if (luxAvatarCrop?.url) URL.revokeObjectURL(luxAvatarCrop.url);
+    luxAvatarCrop = null;
+    close("avatar-crop-modal");
+    if ($("profile-avatar-file")) $("profile-avatar-file").value = "";
+}
+
+async function applyAvatarCrop() {
+    if (!luxAvatarCrop) return;
+    const crop = luxAvatarCrop;
+    const out = document.createElement("canvas");
+    out.width = 512;
+    out.height = 512;
+    const ctx = out.getContext("2d");
+    const scale = crop.baseScale * crop.zoom;
+    const factor = 512 / crop.size;
+    ctx.beginPath();
+    ctx.arc(256, 256, 256, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(
+        crop.image,
+        (crop.x - crop.image.width * scale / 2) * factor,
+        (crop.y - crop.image.height * scale / 2) * factor,
+        crop.image.width * scale * factor,
+        crop.image.height * scale * factor
+    );
+
+    out.toBlob(async (blob) => {
+        if (!blob) return;
+        const croppedFile = new File([blob], "profile-picture.png", {type: "image/png"});
+        if ($("profile-avatar-file")) {
+            const transfer = new DataTransfer();
+            transfer.items.add(croppedFile);
+            $("profile-avatar-file").files = transfer.files;
+        }
+        URL.revokeObjectURL(crop.url);
+        luxAvatarCrop = null;
+        close("avatar-crop-modal");
+        $("profile-error").textContent = "Cropped photo ready. Click Save profile.";
+    }, "image/png");
+}
+
+// =============================
 // PROFILE
 // =============================
 
@@ -1767,14 +1934,6 @@ function openProfile() {
     $("profile-bio").value =
         me.bio || "";
     if ($("profile-avatar-file")) $("profile-avatar-file").value = "";
-
-    const zoom = Number(localStorage.getItem("luxcord_avatar_zoom") || "100");
-    if ($("profile-avatar-zoom")) {
-        $("profile-avatar-zoom").value = String(zoom);
-        $("profile-avatar-zoom-value").textContent = zoom + "%";
-        document.documentElement.style.setProperty("--luxcord-avatar-zoom", String(zoom / 100));
-    }
-
     open("profile-modal");
 }
 
@@ -1796,9 +1955,12 @@ async function saveProfile() {
             $("profile-error").textContent = "Profile pictures must be 5 MB or smaller.";
             return;
         }
-        const extension = (file.name.split(".").pop() || "jpg").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-        const path = "avatars/" + session.user.id + "-" + Date.now() + "." + extension;
-        const upload = await sb.storage.from("luxcord-attachments").upload(path, file, { cacheControl: "3600", upsert: false });
+        const path = "avatars/" + session.user.id + "-" + Date.now() + ".png";
+        const upload = await sb.storage.from("luxcord-attachments").upload(path, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: "image/png"
+        });
         if (upload.error) {
             $("profile-error").textContent = upload.error.message;
             return;
