@@ -1536,6 +1536,8 @@ async function refreshDM() {
             "
         >${esc(message.message)}</div>
 
+        <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${message.sender_id === session.user.id ? (message.read_at ? "Seen" : "Sent") : ""}</div>
+
         <div
             class="message-actions"
             style="
