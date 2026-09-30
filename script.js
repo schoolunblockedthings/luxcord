@@ -1236,75 +1236,36 @@ async function clearNotifications() {
 // =============================
 
 async function loadDMs() {
-    if (!session) {
-        return;
+    if (!session) return;
+    const result = await sb.from("friendships").select("*")
+        .or(`requester.eq.${session.user.id},addressee.eq.${session.user.id}`).eq("status","accepted");
+    const ids=(result.data||[]).map(f=>f.requester===session.user.id?f.addressee:f.requester);
+    let profiles=[];
+    if(ids.length){
+        const pr=await sb.from("profiles").select("id,username,display_name,last_seen_at").in("id",ids);
+        profiles=pr.data||[];
     }
-
-    const result = await sb
-        .from("friendships")
-        .select("*")
-        .or(
-            `requester.eq.${session.user.id},addressee.eq.${session.user.id}`
-        )
-        .eq("status", "accepted");
-
-    const ids = [
-        ...(result.data || []).map((friendship) =>
-            friendship.requester === session.user.id
-                ? friendship.addressee
-                : friendship.requester
-        )
-    ];
-
-    let profiles = [];
-
-    if (ids.length) {
-        const profileResult = await sb
-            .from("profiles")
-            .select("id,username,display_name")
-            .in("id", ids);
-
-        profiles = profileResult.data || [];
-    }
-
-    const dmListHTML =
-        profiles
-            .map((profile) => {
-                const name =
-                    profile.display_name ||
-                    profile.username ||
-                    "User";
-
-                return `
-                    <div
-                        class="side-item"
-                        onclick="openDM('${profile.id}')"
-                    >
-                        <div class="avatar">
-                            ${esc(name[0]?.toUpperCase() || "?")}
-                        </div>
-
-                        ${esc(name)}
-                    </div>
-                `;
-            })
-            .join("") ||
-        `
-            <div
-                class="muted"
-                style="padding:10px"
-            >
-                Add friends to start DMs.
-            </div>
-        `;
-
-    if ($("dm-people")) {
-        $("dm-people").innerHTML = dmListHTML;
-    }
-
-    if ($("dm-people-main")) {
-        $("dm-people-main").innerHTML = dmListHTML;
-    }
+    const rows=await Promise.all(profiles.map(async profile=>{
+        const users=[session.user.id,profile.id].sort();
+        const conv=await sb.from("dm_conversations").select("id").eq("user_a",users[0]).eq("user_b",users[1]).maybeSingle();
+        let unread=0;
+        if(conv.data){
+            const count=await sb.from("dm_messages").select("id",{count:"exact",head:true})
+                .eq("conversation_id",conv.data.id).neq("sender_id",session.user.id).is("read_at",null);
+            unread=count.count||0;
+        }
+        const name=profile.display_name||profile.username||"User";
+        return `<div class="side-item" data-dm-user-id="${profile.id}" onclick="openDM('${profile.id}')">
+            <div class="avatar">${esc(name[0]?.toUpperCase()||"?")}</div>
+            <span class="dm-online-dot">○</span>
+            <span>${esc(name)}</span>
+            ${unread?'<span class="dm-unread-badge">'+unread+'</span>':''}
+        </div>`;
+    }));
+    const html=rows.join("")||'<div class="muted" style="padding:10px">Add friends to start DMs.</div>';
+    if($("dm-people"))$("dm-people").innerHTML=html;
+    if($("dm-people-main"))$("dm-people-main").innerHTML=html;
+    luxRenderPresence?.();
 }
 
 window.openDM = async function (id) {
@@ -1553,7 +1514,7 @@ async function refreshDM() {
                 margin:1px 0 0 0;
                 padding:0;
             "
-        ><button onclick="replyToDMMessage(\${message.id}, \${JSON.stringify(message.message)})">↩</button><button
+        ><button onclick="replyToDMMessage(\${message.id}, \${JSON.stringify(message.message)})">↩</button><button onclick="editDMMessage(\${message.id})">✎</button><button onclick="deleteDMMessage(\${message.id})">🗑</button><button
             onclick="reactDM(\${message.id}, '❤️')"
             style="
                 display:inline-flex;
@@ -1940,25 +1901,9 @@ setInterval(() => {
 }, 4000);
 
 
-// =============================
-// DM LIVE FALLBACK
-// =============================
-
-setInterval(() => {
-    if (
-        session &&
-        dm &&
-        !$("dms-view")?.classList.contains("hidden")
-    ) {
-        refreshDM();
-    }
-}, 2000);
-
-
-async function editDMMessage(id){const current=prompt("Edit message:");if(current===null||!current.trim())return;const r=await sb.rpc("edit_dm_message",{p_message_id:id,p_message:current.trim()});if(r.error)alert(r.error.message);else refreshDM();}
-async function deleteDMMessage(id){if(!confirm("Delete this message?"))return;const r=await sb.rpc("delete_dm_message",{p_message_id:id});if(r.error)alert(r.error.message);else refreshDM();}
-function replyToDMMessage(id,text){reply={id:id,text:text};$("dm-reply-text").textContent="Replying to: "+text.slice(0,100);$("dm-reply-bar")?.classList.remove("hidden");$("dm-input")?.focus();}
-async function uploadDMAttachment(file){if(!file||!dm||!session)return null;if(file.size>15*1024*1024){alert("Attachments must be 15 MB or smaller.");return null;}const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=session.user.id+"/"+Date.now()+"-"+safe;const up=await sb.storage.from("luxcord-attachments").upload(path,file,{upsert:false});if(up.error){alert(up.error.message);return null;}return {url:sb.storage.from("luxcord-attachments").getPublicUrl(path).data.publicUrl,name:file.name};}
+async function luxUpdateLastSeen(){if(!session)return;await sb.from("profiles").update({last_seen_at:new Date().toISOString()}).eq("id",session.user.id);}
+setInterval(luxUpdateLastSeen,60000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)luxUpdateLastSeen();});
 /* LIVE CHAT ENHANCEMENTS */
 let luxRoomChannel=null,luxRoomTypingTimer=null,luxRoomTypingUsers=new Set();
 function luxSubscribeRoomTyping(){if(!session||!room)return;if(luxRoomChannel)sb.removeChannel(luxRoomChannel);luxRoomChannel=sb.channel("luxcord-room-typing-"+room).on("broadcast",{event:"typing"},({payload})=>{if(!payload||payload.user_id===session.user.id)return;if(payload.typing)luxRoomTypingUsers.add(payload.user_id);else luxRoomTypingUsers.delete(payload.user_id);const label=$("typing-label");if(label)label.textContent=luxRoomTypingUsers.size?(payload.username+" is typing…"):"";}).subscribe();}
