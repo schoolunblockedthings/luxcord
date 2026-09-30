@@ -407,6 +407,7 @@ async function createRoom() {
 async function joinRoom(roomCode, name) {
     room = roomCode;
     luxSubscribeRoomTyping();
+    luxBindRoomTyping();
 
     // Fixed:
     // The old code referenced #room-display even though
@@ -1939,43 +1940,64 @@ async function luxUpdateLastSeen(){if(!session)return;await sb.from("profiles").
 setInterval(luxUpdateLastSeen,60000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)luxUpdateLastSeen();});
 /* LIVE CHAT ENHANCEMENTS */
-let luxRoomChannel=null,luxRoomTypingTimer=null,luxRoomTypingUsers=new Set();
+let luxRoomChannel=null;
+let luxRoomTypingTimer=null;
+let luxRoomTypingUsers=new Map();
+let luxPresenceChannel=null;
+let luxDMChannel=null;
+let luxDMChannelReady=false;
+let luxTypingTimer=null;
+let luxTypingUsers=new Set();
+let luxPresenceKey=null;
+
+function luxSetTypingLabel(id,text){
+    const el=$(id);
+    if(el)el.textContent=text||"";
+}
 
 function luxSubscribeRoomTyping(){
     if(!session||!room)return;
     if(luxRoomChannel)sb.removeChannel(luxRoomChannel);
     luxRoomTypingUsers.clear();
-    luxRoomChannel=sb.channel("luxcord-room-typing-"+room)
-        .on("broadcast",{event:"typing"},({payload})=>{
-            if(!payload||payload.user_id===session.user.id)return;
-            if(payload.typing)luxRoomTypingUsers.add(payload.user_id);
-            else luxRoomTypingUsers.delete(payload.user_id);
-            const label=$("typing-label");
-            if(label){
-                label.textContent=luxRoomTypingUsers.size
-                    ? (payload.username||"Someone")+" is typing…"
-                    : "";
-            }
-        })
-        .subscribe(status=>{
-            if(status!=="SUBSCRIBED")console.warn("Room typing channel:",status);
-        });
+
+    luxRoomChannel=sb.channel("luxcord-room-typing-"+String(room),{
+        config:{broadcast:{self:false}}
+    }).on("broadcast",{event:"typing"},({payload})=>{
+        if(!payload||String(payload.user_id)===String(session.user.id))return;
+        const uid=String(payload.user_id);
+        if(payload.typing){
+            luxRoomTypingUsers.set(uid,payload.username||"Someone");
+        }else{
+            luxRoomTypingUsers.delete(uid);
+        }
+        const names=[...luxRoomTypingUsers.values()];
+        luxSetTypingLabel(
+            "typing-label",
+            names.length ? (names.length===1 ? names[0]+" is typing…" : names.length+" people are typing…") : ""
+        );
+    }).subscribe(status=>{
+        if(status==="SUBSCRIBED")luxBindRoomTyping();
+        else console.warn("Room typing channel:",status);
+    });
 }
 
-async function luxSendRoomTyping(t){
-    if(luxRoomChannel&&session){
-        await luxRoomChannel.send({
-            type:"broadcast",
-            event:"typing",
-            payload:{user_id:session.user.id,username:me?.username||"User",typing:t}
-        });
-    }
+async function luxSendRoomTyping(typing){
+    if(!luxRoomChannel||!session)return;
+    await luxRoomChannel.send({
+        type:"broadcast",
+        event:"typing",
+        payload:{
+            user_id:session.user.id,
+            username:me?.display_name||me?.username||"Someone",
+            typing:!!typing
+        }
+    });
 }
 
 function luxBindRoomTyping(){
     const input=$("message-input");
-    if(!input||input.dataset.luxTyping)return;
-    input.dataset.luxTyping="1";
+    if(!input||input.dataset.luxTyping==="room")return;
+    input.dataset.luxTyping="room";
     input.addEventListener("input",()=>{
         luxSendRoomTyping(true);
         clearTimeout(luxRoomTypingTimer);
@@ -1984,117 +2006,141 @@ function luxBindRoomTyping(){
     input.addEventListener("blur",()=>luxSendRoomTyping(false));
 }
 
-let luxPresenceChannel=null,luxDMChannel=null,luxTypingTimer=null,luxTypingUsers=new Set();
-
-function luxRegisterNotifications(){
-    if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(console.warn);
-}
-
-async function luxMarkDMRead(){
-    if(!dm||!session||$("dms-view")?.classList.contains("hidden"))return;
-    const r=await sb.rpc("mark_dm_messages_read",{p_conversation_id:dm.id});
-    if(r.error){
-        console.warn("DM read receipt:",r.error.message);
-        return;
-    }
-    await refreshDM();
-    if(typeof loadDMs==="function")await loadDMs();
-}
-
 function luxIsOnline(id){
-    if(!luxPresenceChannel)return false;
+    if(!id||!luxPresenceChannel)return false;
     const state=luxPresenceChannel.presenceState();
     return Object.values(state).some(entries=>
-        entries.some(entry=>String(entry.user_id)===String(id)&&entry.tab_open===true)
+        (entries||[]).some(entry=>
+            String(entry?.user_id)===String(id) && entry?.tab_open===true
+        )
     );
 }
 
 function luxRenderPresence(){
-    document.querySelectorAll(".side-item").forEach(el=>{
-        const onclick=el.getAttribute("onclick")||"";
-        const match=onclick.match(/openDM\(['"]([^'"]+)['"]\)/);
+    document.querySelectorAll("[data-dm-user-id]").forEach(el=>{
+        const id=el.getAttribute("data-dm-user-id");
         const dot=el.querySelector(".dm-online-dot");
-        if(match&&dot){
-            const online=luxIsOnline(match[1]);
-            dot.textContent=online?"●":"○";
-            dot.title=online?"Online now":"Offline";
-        }
+        if(!dot)return;
+        const online=luxIsOnline(id);
+        dot.textContent=online?"●":"○";
+        dot.title=online?"Online now":"Offline";
+        dot.classList.toggle("online",online);
     });
 
-    if(dm){
-        const otherId=String(dm.user_a)===String(session?.user?.id)?dm.user_b:dm.user_a;
+    if(dm&&session){
+        const otherId=String(dm.user_a)===String(session.user.id)?dm.user_b:dm.user_a;
         const status=$("dm-conversation-status");
         if(status)status.textContent=luxIsOnline(otherId)?"Online now":"Offline";
     }
 }
 
-function luxPresenceSetup(){
+async function luxPresenceSetup(){
     if(!session)return;
     if(luxPresenceChannel)sb.removeChannel(luxPresenceChannel);
 
+    // A unique presence key makes each browser tab independently trackable.
+    luxPresenceKey=String(session.user.id)+"-"+Math.random().toString(36).slice(2);
     luxPresenceChannel=sb.channel("luxcord-presence",{
-        config:{presence:{key:session.user.id}}
+        config:{presence:{key:luxPresenceKey}}
     })
     .on("presence",{event:"sync"},luxRenderPresence)
     .on("presence",{event:"join"},luxRenderPresence)
     .on("presence",{event:"leave"},luxRenderPresence)
     .subscribe(async status=>{
         if(status==="SUBSCRIBED"){
-            const tracked=await luxPresenceChannel.track({
+            const result=await luxPresenceChannel.track({
                 user_id:session.user.id,
-                username:me?.username||"User",
+                username:me?.display_name||me?.username||"User",
                 tab_open:true
             });
-            if(tracked?.error)console.warn("Presence track:",tracked.error);
+            if(result?.error)console.warn("Presence track:",result.error);
             luxRenderPresence();
+        }else{
+            console.warn("Presence channel:",status);
         }
     });
+}
+
+async function luxMarkDMRead({refresh=true}={}){
+    if(!dm||!session||$("dms-view")?.classList.contains("hidden"))return false;
+    const result=await sb.rpc("mark_dm_messages_read",{p_conversation_id:dm.id});
+    if(result.error){
+        console.warn("DM read receipt:",result.error.message);
+        return false;
+    }
+    if(refresh)await refreshDM();
+    await loadDMs();
+    return true;
 }
 
 function luxSubscribeDM(){
     if(!dm||!session)return;
     if(luxDMChannel)sb.removeChannel(luxDMChannel);
     luxTypingUsers.clear();
+    luxDMChannelReady=false;
+    luxSetTypingLabel("dm-typing-label","");
 
-    luxDMChannel=sb.channel("luxcord-dm-live-"+dm.id)
-        .on("broadcast",{event:"typing"},({payload})=>{
-            if(!payload||payload.user_id===session.user.id)return;
-            if(payload.typing)luxTypingUsers.add(payload.user_id);
-            else luxTypingUsers.delete(payload.user_id);
-            const label=$("dm-typing-label");
-            if(label)label.textContent=luxTypingUsers.size?"Typing…":"";
-        })
-        .on("postgres_changes",{
-            event:"*",
-            schema:"public",
-            table:"dm_messages",
-            filter:"conversation_id=eq."+dm.id
-        },async()=>{
-            await refreshDM();
-            if($("dms-view")&&!$("dms-view").classList.contains("hidden")){
-                await luxMarkDMRead();
-            }
-        })
-        .subscribe(status=>{
-            if(status!=="SUBSCRIBED")console.warn("DM realtime channel:",status);
-        });
+    luxDMChannel=sb.channel("luxcord-dm-live-"+String(dm.id),{
+        config:{broadcast:{self:false}}
+    })
+    .on("broadcast",{event:"typing"},({payload})=>{
+        if(!payload||String(payload.user_id)===String(session.user.id))return;
+        if(payload.typing)luxTypingUsers.add(String(payload.user_id));
+        else luxTypingUsers.delete(String(payload.user_id));
+        luxSetTypingLabel("dm-typing-label",luxTypingUsers.size?"Typing…":"");
+    })
+    .on("postgres_changes",{
+        event:"*",
+        schema:"public",
+        table:"dm_messages",
+        filter:"conversation_id=eq."+dm.id
+    },async payload=>{
+        // Refresh first so new/edit/delete messages appear immediately.
+        await refreshDM();
+
+        // If this conversation is open, mark incoming messages read.
+        if(!$("dms-view")?.classList.contains("hidden")){
+            await luxMarkDMRead({refresh:false});
+        }
+    })
+    .subscribe(status=>{
+        luxDMChannelReady=status==="SUBSCRIBED";
+        if(status==="SUBSCRIBED"){
+            luxBindTyping();
+            luxMarkDMRead({refresh:false});
+        }else{
+            console.warn("DM realtime channel:",status);
+        }
+    });
 }
 
-async function luxSendTyping(t){
-    if(luxDMChannel&&session){
-        await luxDMChannel.send({
-            type:"broadcast",
-            event:"typing",
-            payload:{user_id:session.user.id,typing:t}
-        });
-    }
+async function luxSendTyping(typing){
+    if(!luxDMChannel||!luxDMChannelReady||!session)return;
+    await luxDMChannel.send({
+        type:"broadcast",
+        event:"typing",
+        payload:{user_id:session.user.id,typing:!!typing}
+    });
+}
+
+function luxBindTyping(){
+    const input=$("dm-input");
+    if(!input||input.dataset.luxTyping==="dm")return;
+    input.dataset.luxTyping="dm";
+    input.addEventListener("input",()=>{
+        luxSendTyping(true);
+        clearTimeout(luxTypingTimer);
+        luxTypingTimer=setTimeout(()=>luxSendTyping(false),1200);
+    });
+    input.addEventListener("blur",()=>luxSendTyping(false));
 }
 
 const luxOriginalOpenDM=window.openDM;
 window.openDM=async function(id){
     await luxOriginalOpenDM(id);
     luxSubscribeDM();
-    await luxMarkDMRead();
+    luxBindTyping();
+    await luxMarkDMRead({refresh:false});
     luxRenderPresence();
 };
 
@@ -2114,40 +2160,36 @@ setupRealtime=function(){
             const data=p.new.notification_data||{};
             if(dm&&String(dm.id)===String(data.conversation_id)&&!$("dms-view")?.classList.contains("hidden"))return;
             const reg=await navigator.serviceWorker?.ready.catch(()=>null);
-            if(reg)await reg.showNotification(p.new.notification_title||"New direct message",{
-                body:p.new.notification_body||"You received a message.",
-                tag:"luxcord-dm-"+(data.conversation_id||data.sender_id),
-                renotify:true,data,
-                actions:[{action:"reply",title:"Reply"},{action:"open",title:"Open"}]
-            });
-        }).subscribe();
+            if(reg)await reg.showNotification(
+                p.new.notification_title||"New direct message",
+                {
+                    body:p.new.notification_body||"You received a message.",
+                    tag:"luxcord-dm-"+(data.conversation_id||data.sender_id),
+                    renotify:true,
+                    data,
+                    actions:[{action:"reply",title:"Reply"},{action:"open",title:"Open"}]
+                }
+            );
+        })
+        .subscribe();
 };
 
-function luxBindTyping(){
-    const input=$("dm-input");
-    if(!input||input.dataset.luxTyping)return;
-    input.dataset.luxTyping="1";
-    input.addEventListener("input",()=>{
-        luxSendTyping(true);
-        clearTimeout(luxTypingTimer);
-        luxTypingTimer=setTimeout(()=>luxSendTyping(false),1200);
-    });
-    input.addEventListener("blur",()=>luxSendTyping(false));
-}
-
-setInterval(luxBindTyping,500);
-setInterval(luxRenderPresence,3000);
-
 document.addEventListener("visibilitychange",async()=>{
-    if(!document.hidden){
-        if(dm)await luxMarkDMRead();
-        if(luxPresenceChannel&&session){
+    if(!session)return;
+    if(document.hidden){
+        await luxPresenceChannel?.untrack();
+        luxSetTypingLabel("typing-label","");
+        luxSetTypingLabel("dm-typing-label","");
+    }else{
+        if(luxPresenceChannel){
             await luxPresenceChannel.track({
                 user_id:session.user.id,
-                username:me?.username||"User",
+                username:me?.display_name||me?.username||"User",
                 tab_open:true
             });
         }
+        await luxUpdateLastSeen();
+        if(dm&&!$("dms-view")?.classList.contains("hidden"))await luxMarkDMRead();
         luxRenderPresence();
     }
 });
