@@ -316,6 +316,8 @@ function bind() {
         "click",
         sendDM
     );
+    $("dm-attach")?.addEventListener("click",()=>$( "dm-file")?.click());
+    $("dm-cancel-reply")?.addEventListener("click",()=>{reply=null;$("dm-reply-bar")?.classList.add("hidden");});
 
     $("dm-input")?.addEventListener(
         "keydown",
@@ -1551,8 +1553,8 @@ async function refreshDM() {
                 margin:1px 0 0 0;
                 padding:0;
             "
-        ><button
-            onclick="reactDM(${message.id}, '❤️')"
+        ><button onclick="replyToDMMessage(\${message.id}, \${JSON.stringify(message.message)})">↩</button><button
+            onclick="reactDM(\${message.id}, '❤️')"
             style="
                 display:inline-flex;
                 align-items:center;
@@ -1594,57 +1596,7 @@ async function refreshDM() {
 }
 
 
-async function sendDM() {
-    if (!dm || !session) {
-        return;
-    }
-
-    const input = $("dm-input");
-
-    if (!input) {
-        return;
-    }
-
-    const text =
-        input.value.trim();
-
-    if (!text) {
-        return;
-    }
-
-    const result = await sb
-        .from("dm_messages")
-        .insert({
-            conversation_id: dm.id,
-            sender_id: session.user.id,
-            message: text
-        });
-
-    if (result.error) {
-        alert(result.error.message);
-        return;
-    }
-
-    input.value = "";
-
-    const target =
-        dm.user_a === session.user.id
-            ? dm.user_b
-            : dm.user_a;
-
-    await notify(
-        target,
-        "dm",
-        "New direct message",
-        `${me.display_name || me.username} sent you a message.`,
-        {
-            conversation_id: dm.id,
-            sender_id: session.user.id
-        }
-    );
-
-    await refreshDM();
-}
+async function sendDM(){if(!dm||!session)return;const input=$("dm-input");if(!input)return;const text=input.value.trim();const file=$("dm-file")?.files?.[0];if(!text&&!file)return;const attachment=file?await uploadDMAttachment(file):null;const result=await sb.from("dm_messages").insert({conversation_id:dm.id,sender_id:session.user.id,message:text||(attachment?.name||""),reply_to_id:reply?.id||null,attachment_url:attachment?.url||null,attachment_name:attachment?.name||null});if(result.error){alert(result.error.message);return;}input.value="";if($("dm-file"))$("dm-file").value="";reply=null;$("dm-reply-bar")?.classList.add("hidden");const target=dm.user_a===session.user.id?dm.user_b:dm.user_a;await notify(target,"dm","New direct message",`${me.display_name||me.username} sent you a message.`,{conversation_id:dm.id,sender_id:session.user.id});await refreshDM();}
 
 
 window.reactDM = async function (
@@ -2003,6 +1955,10 @@ setInterval(() => {
 }, 2000);
 
 
+async function editDMMessage(id){const current=prompt("Edit message:");if(current===null||!current.trim())return;const r=await sb.rpc("edit_dm_message",{p_message_id:id,p_message:current.trim()});if(r.error)alert(r.error.message);else refreshDM();}
+async function deleteDMMessage(id){if(!confirm("Delete this message?"))return;const r=await sb.rpc("delete_dm_message",{p_message_id:id});if(r.error)alert(r.error.message);else refreshDM();}
+function replyToDMMessage(id,text){reply={id:id,text:text};$("dm-reply-text").textContent="Replying to: "+text.slice(0,100);$("dm-reply-bar")?.classList.remove("hidden");$("dm-input")?.focus();}
+async function uploadDMAttachment(file){if(!file||!dm||!session)return null;if(file.size>15*1024*1024){alert("Attachments must be 15 MB or smaller.");return null;}const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=session.user.id+"/"+Date.now()+"-"+safe;const up=await sb.storage.from("luxcord-attachments").upload(path,file,{upsert:false});if(up.error){alert(up.error.message);return null;}return {url:sb.storage.from("luxcord-attachments").getPublicUrl(path).data.publicUrl,name:file.name};}
 /* LIVE CHAT ENHANCEMENTS */
 let luxRoomChannel=null,luxRoomTypingTimer=null,luxRoomTypingUsers=new Set();
 function luxSubscribeRoomTyping(){if(!session||!room)return;if(luxRoomChannel)sb.removeChannel(luxRoomChannel);luxRoomChannel=sb.channel("luxcord-room-typing-"+room).on("broadcast",{event:"typing"},({payload})=>{if(!payload||payload.user_id===session.user.id)return;if(payload.typing)luxRoomTypingUsers.add(payload.user_id);else luxRoomTypingUsers.delete(payload.user_id);const label=$("typing-label");if(label)label.textContent=luxRoomTypingUsers.size?(payload.username+" is typing…"):"";}).subscribe();}
