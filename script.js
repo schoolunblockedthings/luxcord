@@ -48,6 +48,16 @@ const close = (id) => {
 // APP BOOT / AUTH
 // =============================
 
+function avatarHTML(profile, className = "avatar") {
+    const name = profile?.display_name || profile?.username || "User";
+    const initial = esc(name[0]?.toUpperCase() || "?");
+    if (profile?.avatar_url) {
+        return '<div class="' + className + ' avatar-photo"><img src="' + esc(profile.avatar_url) + '" alt="' + esc(name) + '" loading="lazy"></div>';
+    }
+    return '<div class="' + className + '">' + initial + '</div>';
+}
+
+
 async function boot() {
     const result = await sb.auth.getSession();
 
@@ -60,6 +70,7 @@ async function boot() {
 
         setupRealtime();
         await luxStartPresence();
+        await luxStartTyping();
 
         await Promise.all([
             loadFriends(),
@@ -139,8 +150,7 @@ function renderMe() {
     }
 
     if ($("me-avatar")) {
-        $("me-avatar").textContent =
-            name[0]?.toUpperCase() || "U";
+        $("me-avatar").innerHTML = avatarHTML(me, "avatar");
     }
 }
 
@@ -316,6 +326,21 @@ function bind() {
     $("dm-send")?.addEventListener(
         "click",
         sendDM
+    );
+
+    $("dm-input")?.addEventListener(
+        "input",
+        () => luxTypingSend(true)
+    );
+
+    $("dm-input")?.addEventListener(
+        "blur",
+        () => luxTypingSend(false)
+    );
+
+    $("message-input")?.addEventListener(
+        "blur",
+        () => luxTypingSend(false)
     );
 
     $("dm-input")?.addEventListener(
@@ -718,6 +743,7 @@ async function sendRoom() {
     }
 
     input.value = "";
+    luxTypingSend(false);
 
     if ($("char-counter")) {
         $("char-counter").textContent =
@@ -815,7 +841,7 @@ async function loadFriends() {
         const profileResult = await sb
             .from("profiles")
             .select(
-                "id,username,display_name,status"
+                "id,username,display_name,status,avatar_url"
             )
             .in("id", ids);
 
@@ -928,9 +954,7 @@ function person(profile, actions) {
     return `
         <div class="person-card">
 
-            <div class="avatar">
-                ${esc(displayName[0])}
-            </div>
+            ${avatarHTML(profile)}
 
             <div class="info">
                 <b>${esc(displayName)}</b>
@@ -1279,10 +1303,7 @@ async function loadDMs() {
                         data-dm-user-id="${profile.id}"
                         onclick="openDM('${profile.id}')"
                     >
-                        <div class="avatar">
-                            ${esc(name[0]?.toUpperCase() || "?")}
-                        </div>
-                        <span class="lux-online-dot" title="Offline">○</span>
+                        ${avatarHTML(profile)}<span class="lux-online-dot" title="Offline">○</span>
                         <span>${esc(name)}</span>
                     </div>
                 `;            })
@@ -1340,6 +1361,17 @@ window.openDM = async function (id) {
 
     dm = result.data;
 
+    const targetProfile = await sb
+        .from("profiles")
+        .select("id,username,display_name,status,avatar_url")
+        .eq("id", id)
+        .maybeSingle();
+    const dmProfile = targetProfile.data || { id, display_name: "User" };
+    if ($("dm-conversation-name")) $("dm-conversation-name").textContent = dmProfile.display_name || dmProfile.username || "User";
+    if ($("dm-conversation-status")) $("dm-conversation-status").textContent = dmProfile.status || "Direct message";
+    if ($("dm-conversation-avatar")) $("dm-conversation-avatar").innerHTML = avatarHTML(dmProfile, "avatar");
+    luxTypingContextChanged();
+
     view("dms");
 
     open("dm-messages");
@@ -1393,7 +1425,7 @@ async function refreshDM() {
             const profileResult = await sb
                 .from("profiles")
                 .select(
-                    "id,username,display_name"
+                    "id,username,display_name,avatar_url"
                 )
                 .in("id", ids);
 
@@ -1435,8 +1467,9 @@ async function refreshDM() {
                     user.username ||
                     "User";
 
-                const avatar =
-                    name[0]?.toUpperCase() || "?";
+                const avatar = user.avatar_url
+                    ? '<div class="message-avatar avatar-photo"><img src="' + esc(user.avatar_url) + '" alt="' + esc(name) + '" loading="lazy"></div>'
+                    : '<div class="message-avatar">' + esc(name[0]?.toUpperCase() || "?") + '</div>';
 
                 const time =
                     new Date(
@@ -1472,7 +1505,7 @@ async function refreshDM() {
             margin:0;
             padding:0;
         "
-    >${esc(avatar)}</div>
+    >${avatar}</div>
 
     <div
         class="message-body"
@@ -1627,6 +1660,7 @@ async function sendDM() {
     }
 
     input.value = "";
+    luxTypingSend(false);
 
     const target =
         dm.user_a === session.user.id
@@ -1705,64 +1739,54 @@ function openProfile() {
 
     $("profile-bio").value =
         me.bio || "";
+    if ($("profile-avatar-file")) $("profile-avatar-file").value = "";
 
     open("profile-modal");
 }
 
 
 async function saveProfile() {
-    const username =
-        $("profile-username")
-            .value
-            .trim()
-            .replace(
-                /[^a-zA-Z0-9_.-]/g,
-                ""
-            );
-
+    const username = $("profile-username").value.trim().replace(/[^a-zA-Z0-9_.-]/g, "");
     if (username.length < 3) {
-        if ($("profile-error")) {
-            $("profile-error").textContent =
-                "Username must be at least 3 characters.";
-        }
-
+        $("profile-error").textContent = "Username must be at least 3 characters.";
         return;
     }
-
-    const result = await sb
-        .from("profiles")
-        .update({
-            username,
-            display_name:
-                $("profile-display-name")
-                    .value
-                    .trim() || username,
-            status:
-                $("profile-status")
-                    .value
-                    .trim() || "Online",
-            bio:
-                $("profile-bio")
-                    .value
-                    .trim()
-        })
-        .eq("id", session.user.id)
-        .select()
-        .single();
-
+    let avatarUrl = me?.avatar_url || null;
+    const file = $("profile-avatar-file")?.files?.[0];
+    if (file) {
+        if (!file.type.startsWith("image/")) {
+            $("profile-error").textContent = "Please choose an image.";
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            $("profile-error").textContent = "Profile pictures must be 5 MB or smaller.";
+            return;
+        }
+        const extension = (file.name.split(".").pop() || "jpg").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+        const path = "avatars/" + session.user.id + "-" + Date.now() + "." + extension;
+        const upload = await sb.storage.from("luxcord-attachments").upload(path, file, { cacheControl: "3600", upsert: false });
+        if (upload.error) {
+            $("profile-error").textContent = upload.error.message;
+            return;
+        }
+        avatarUrl = sb.storage.from("luxcord-attachments").getPublicUrl(path).data.publicUrl;
+    }
+    const result = await sb.from("profiles").update({
+        username,
+        display_name: $("profile-display-name").value.trim() || username,
+        status: $("profile-status").value.trim() || "Online",
+        bio: $("profile-bio").value.trim(),
+        avatar_url: avatarUrl
+    }).eq("id", session.user.id).select().single();
     if (result.error) {
-        if ($("profile-error")) {
-            $("profile-error").textContent =
-                result.error.message;
-        }
-
+        $("profile-error").textContent = result.error.message;
         return;
     }
-
     me = result.data;
-
+    if ($("profile-avatar-file")) $("profile-avatar-file").value = "";
     renderMe();
-
+    await loadFriends();
+    await loadDMs();
     close("profile-modal");
 }
 
@@ -1975,6 +1999,80 @@ function setupRealtime() {
 }
 
 // =============================
+// SIMPLE REALTIME TYPING
+// =============================
+let luxTypingChannel = null;
+let luxTypingTimer = null;
+const luxTypingUsers = new Map();
+function luxTypingContext() {
+    if (dm) return { kind: "dm", id: String(dm.id) };
+    if (room) return { kind: "room", id: String(room) };
+    return null;
+}
+function luxTypingRender() {
+    const ctx = luxTypingContext();
+    const label = ctx?.kind === "dm" ? $("dm-typing-label") : $("typing-label");
+    const otherLabel = ctx?.kind === "dm" ? $("typing-label") : $("dm-typing-label");
+    if (otherLabel) otherLabel.textContent = "";
+    if (!label) return;
+    const names = [];
+    const now = Date.now();
+    for (const [key, value] of luxTypingUsers) {
+        if (now - value.at > 1800 || value.userId === session?.user?.id) {
+            luxTypingUsers.delete(key);
+            continue;
+        }
+        if (ctx && value.kind === ctx.kind && value.id === ctx.id) names.push(value.name || "Someone");
+    }
+    label.textContent = names.length === 0 ? "" : names.length === 1 ? names[0] + " is typing…" : names.slice(0, 2).join(" and ") + " are typing…";
+}
+function luxTypingContextChanged() {
+    luxTypingUsers.clear();
+    luxTypingRender();
+}
+async function luxTypingSend(typing) {
+    if (!session || !luxTypingChannel) return;
+    const ctx = luxTypingContext();
+    if (!ctx) return;
+    await luxTypingChannel.send({
+        type: "broadcast",
+        event: "typing",
+        payload: {
+            kind: ctx.kind,
+            id: ctx.id,
+            userId: session.user.id,
+            name: me?.display_name || me?.username || "Someone",
+            typing: !!typing
+        }
+    });
+    if (typing) {
+        clearTimeout(luxTypingTimer);
+        luxTypingTimer = setTimeout(() => luxTypingSend(false), 1400);
+    }
+}
+async function luxStartTyping() {
+    if (!session) return;
+    if (luxTypingChannel) await sb.removeChannel(luxTypingChannel);
+    luxTypingChannel = sb.channel("luxcord-typing")
+        .on("broadcast", { event: "typing" }, ({ payload }) => {
+            if (!payload || payload.userId === session.user.id) return;
+            const key = payload.kind + ":" + payload.id + ":" + payload.userId;
+            if (payload.typing) {
+                luxTypingUsers.set(key, {
+                    kind: payload.kind,
+                    id: String(payload.id),
+                    userId: payload.userId,
+                    name: payload.name,
+                    at: Date.now()
+                });
+            } else {
+                luxTypingUsers.delete(key);
+            }
+            luxTypingRender();
+        })
+        .subscribe();
+}
+// =============================
 // DM READ + ONLINE PRESENCE
 // =============================
 let luxPresenceChannel = null;
@@ -2048,7 +2146,10 @@ document.addEventListener("visibilitychange", async () => {
     luxRenderOnline();
 });
 
-window.addEventListener("pagehide", () => { luxStopPresence(); });
+window.addEventListener("pagehide", () => {
+    luxTypingSend(false);
+    luxStopPresence();
+});
 
 // =============================
 // START
