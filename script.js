@@ -977,7 +977,7 @@ async function loadFriends() {
                         `
                             <button
                                 class="secondary"
-                                onclick="openDM('${id}')"
+                                onclick="event.stopPropagation(); openDM('${id}')"
                             >
                                 Message
                             </button>
@@ -1009,7 +1009,7 @@ function person(profile, actions) {
         profile.username;
 
     return `
-        <div class="person-card">
+        <div class="person-card" onclick="openUserProfile('${profile.id}')">
 
             ${avatarHTML(profile)}
 
@@ -1360,8 +1360,8 @@ async function loadDMs() {
                         data-dm-user-id="${profile.id}"
                         onclick="openDM('${profile.id}')"
                     >
-                        ${avatarHTML(profile)}<span class="lux-online-dot" title="Offline">○</span>
-                        <span>${esc(name)}</span>
+                        <span onclick="event.stopPropagation(); openUserProfile('${profile.id}')" class="clickable-avatar">${avatarHTML(profile)}</span><span class="lux-online-dot" title="Offline">○</span>
+                        <span onclick="event.stopPropagation(); openUserProfile('${profile.id}')" class="clickable-name">${esc(name)}</span>
                     </div>
                 `;            })
             .join("") ||
