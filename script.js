@@ -59,6 +59,7 @@ async function boot() {
         renderMe();
 
         setupRealtime();
+        await luxStartPresence();
 
         await Promise.all([
             loadFriends(),
@@ -1275,16 +1276,16 @@ async function loadDMs() {
                 return `
                     <div
                         class="side-item"
+                        data-dm-user-id="${profile.id}"
                         onclick="openDM('${profile.id}')"
                     >
                         <div class="avatar">
                             ${esc(name[0]?.toUpperCase() || "?")}
                         </div>
-
-                        ${esc(name)}
+                        <span class="lux-online-dot" title="Offline">○</span>
+                        <span>${esc(name)}</span>
                     </div>
-                `;
-            })
+                `;            })
             .join("") ||
         `
             <div
@@ -1346,6 +1347,7 @@ window.openDM = async function (id) {
     close("dm-empty");
 
     await refreshDM();
+    await luxMarkDMRead();
 };
 
 
@@ -1971,6 +1973,52 @@ function setupRealtime() {
 }
 
 // =============================
+// DM READ + ONLINE PRESENCE
+// =============================
+let luxPresenceChannel = null;
+let luxPresenceReady = false;
+async function luxMarkDMRead() {
+    if (!dm || !session) return;
+    const result = await sb.rpc("mark_dm_messages_read", { p_conversation_id: dm.id });
+    if (result.error) { console.warn("DM read receipt:", result.error.message); return; }
+    await refreshDM(); await loadDMs();
+}
+function luxIsOnline(userId) {
+    if (!luxPresenceChannel || !userId) return false;
+    return Object.values(luxPresenceChannel.presenceState()).some(entries =>
+        (entries || []).some(entry => String(entry?.user_id) === String(userId) && entry?.tab_open === true)
+    );
+}
+function luxRenderOnline() {
+    document.querySelectorAll("[data-dm-user-id]").forEach(item => {
+        const dot = item.querySelector(".lux-online-dot"); if (!dot) return;
+        const online = luxIsOnline(item.dataset.dmUserId);
+        dot.textContent = online ? "●" : "○"; dot.title = online ? "Online now" : "Offline";
+        dot.classList.toggle("online", online);
+    });
+}
+async function luxStartPresence() {
+    if (!session) return;
+    if (luxPresenceChannel) await sb.removeChannel(luxPresenceChannel);
+    const key = String(session.user.id) + "-" + Math.random().toString(36).slice(2);
+    luxPresenceReady = false;
+    luxPresenceChannel = sb.channel("luxcord-online", { config: { presence: { key } } })
+        .on("presence", { event: "sync" }, luxRenderOnline)
+        .on("presence", { event: "join" }, luxRenderOnline)
+        .on("presence", { event: "leave" }, luxRenderOnline)
+        .subscribe(async status => {
+            if (status !== "SUBSCRIBED") return;
+            luxPresenceReady = true;
+            await luxPresenceChannel.track({ user_id: session.user.id, tab_open: true });
+            luxRenderOnline();
+        });
+}
+async function luxStopPresence() {
+    if (!luxPresenceChannel) return;
+    try { await luxPresenceChannel.untrack(); await sb.removeChannel(luxPresenceChannel); } catch (_) {}
+    luxPresenceChannel = null; luxPresenceReady = false;
+}
+// =============================
 // PRESENCE REFRESH
 // =============================
 
@@ -1984,16 +2032,21 @@ setInterval(() => {
 // =============================
 // DM LIVE FALLBACK
 // =============================
-
-setInterval(() => {
-    if (
-        session &&
-        dm &&
-        !$("dms-view")?.classList.contains("hidden")
-    ) {
-        refreshDM();
+setInterval(async () => {
+    if (session && dm && !$("dms-view")?.classList.contains("hidden")) {
+        await refreshDM(); await luxMarkDMRead();
     }
-}, 2000);
+    luxRenderOnline();
+}, 3000);
+
+document.addEventListener("visibilitychange", async () => {
+    if (!session || document.hidden) return;
+    if (luxPresenceChannel && luxPresenceReady) await luxPresenceChannel.track({ user_id: session.user.id, tab_open: true });
+    if (dm && !$("dms-view")?.classList.contains("hidden")) await luxMarkDMRead();
+    luxRenderOnline();
+});
+
+window.addEventListener("pagehide", () => { luxStopPresence(); });
 
 // =============================
 // START
