@@ -2204,32 +2204,52 @@ async function refreshGroupChat() {
     try {
         const result = await sb.from("group_messages").select("*")
             .eq("group_id", groupChat.id).order("created_at", { ascending: true });
-        if (result.error) {
-            console.error("Group message load error:", result.error);
-            return;
-        }
+        if (result.error) { console.error("Group message load error:", result.error); return; }
 
         const messages = result.data || [];
+        if (messages.length) {
+            await sb.from("group_message_reads").upsert(
+                messages.map(message => ({
+                    group_id: groupChat.id,
+                    message_id: message.id,
+                    user_id: session.user.id
+                })),
+                { onConflict: "message_id,user_id" }
+            );
+        }
+
+        const readsResult = messages.length
+            ? await sb.from("group_message_reads").select("message_id,user_id").eq("group_id", groupChat.id)
+            : { data: [] };
+        const readCounts = {};
+        (readsResult.data || []).forEach(read => {
+            if (read.user_id !== session.user.id) readCounts[read.message_id] = (readCounts[read.message_id] || 0) + 1;
+        });
+
         const mentionProfiles = await loadMentionProfiles(messages);
-        const senderIds = [...new Set(messages.map((message) => message.sender_id).filter(Boolean))];
+        const senderIds = [...new Set(messages.map(message => message.sender_id).filter(Boolean))];
         const profileResult = senderIds.length
             ? await sb.from("profiles").select("id,username,display_name,avatar_url").in("id", senderIds)
             : { data: [] };
-        const profileMap = Object.fromEntries((profileResult.data || []).map((profile) => [profile.id, profile]));
+        const profileMap = Object.fromEntries((profileResult.data || []).map(profile => [profile.id, profile]));
         const container = $("dm-messages");
         if (!container) return;
 
         const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-        container.innerHTML = messages.map((message) => {
+        container.innerHTML = messages.map(message => {
             const user = profileMap[message.sender_id] || {};
             const name = user.display_name || user.username || "User";
             const time = new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            const seen = message.sender_id === session.user.id && readCounts[message.id]
+                ? "Seen by " + readCounts[message.id]
+                : message.sender_id === session.user.id ? "Sent" : "";
             return `
                 <article class="message" style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;width:100%;margin:0 0 9px;padding:7px 9px;align-items:start">
                     <div class="message-avatar" style="grid-column:1;grid-row:1;width:36px;height:36px;min-width:36px" onclick="openUserProfile('${esc(message.sender_id)}')">${avatarHTML(user, "message-avatar")}</div>
                     <div class="message-body" style="grid-column:2;grid-row:1;min-width:0">
                         <div class="message-head"><b class="clickable-name" onclick="openUserProfile('${esc(message.sender_id)}')">${esc(name)}</b><time>${esc(time)}</time></div>
                         <div class="message-text">${renderMentionText(message.message, mentionProfiles)}</div>
+                        <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${esc(seen)}</div>
                     </div>
                 </article>
             `;
