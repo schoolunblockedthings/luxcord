@@ -401,11 +401,14 @@
                         class="composer hidden"
                     >
 
+                        <div class="mention-input-wrap">
                         <input
                             id="dm-input"
                             maxlength="1000"
                             placeholder="Message your friend..."
                         >
+                            <div id="dm-mention-dropdown" class="mention-dropdown hidden"></div>
+                        </div>
 
                         <button
                             id="dm-attach"
@@ -476,11 +479,14 @@
 
                     <div class="composer">
 
+                        <div class="mention-input-wrap">
                         <input
                             id="message-input"
                             maxlength="1000"
                             placeholder="Type a message..."
                         >
+                            <div id="room-mention-dropdown" class="mention-dropdown hidden"></div>
+                        </div>
 
                         <span id="char-counter">
                             0/1000
