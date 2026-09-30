@@ -387,7 +387,8 @@ function bind() {
         createRoom
     );
 
-    $("new-group-chat")?.addEventListener("click", createGroupChat);
+    $("new-group-chat")?.addEventListener("click", openGroupCreateModal);
+    $("group-create-cancel")?.addEventListener("click", () => close("group-create-modal"));
 
     $("home-room")?.addEventListener(
         "click",
@@ -1548,50 +1549,94 @@ async function loadGroupChats() {
     `).join("") || '<div class="muted group-empty">No group chats yet.</div>';
 }
 
+async function openGroupCreateModal() {
+    if (!session) return;
+
+    const list = $("group-create-friends");
+    if (!list) return;
+
+    $("group-create-name").value = "";
+    $("group-create-error").textContent = "";
+    $("group-create-selected").textContent = "0 selected";
+    list.innerHTML = '<div class="muted">Loading friends...</div>';
+    open("group-create-modal");
+
+    const result = await sb.from("friendships")
+        .select("*")
+        .or(`requester.eq.${session.user.id},addressee.eq.${session.user.id}`)
+        .eq("status", "accepted");
+
+    const ids = [...new Set((result.data || []).map((friendship) =>
+        friendship.requester === session.user.id ? friendship.addressee : friendship.requester
+    ))];
+
+    if (result.error || !ids.length) {
+        list.innerHTML = '<div class="muted">Add some friends first.</div>';
+        return;
+    }
+
+    const profiles = await sb.from("profiles")
+        .select("id,username,display_name,avatar_url")
+        .in("id", ids)
+        .order("username", { ascending: true });
+
+    if (profiles.error) {
+        list.innerHTML = '<div class="muted">Could not load your friends.</div>';
+        return;
+    }
+
+    list.innerHTML = (profiles.data || []).map((profile) => {
+        const name = profile.display_name || profile.username || "User";
+        return '<label class="group-friend-option">' +
+            '<input type="checkbox" value="' + esc(profile.id) + '">' +
+            avatarHTML(profile, "group-friend-avatar") +
+            '<span><b>' + esc(name) + '</b><small>@' + esc(profile.username || "user") + '</small></span>' +
+            '</label>';
+    }).join("") || '<div class="muted">Add some friends first.</div>';
+
+    list.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.addEventListener("change", () => {
+            const count = list.querySelectorAll('input[type="checkbox"]:checked').length;
+            $("group-create-selected").textContent = count + (count === 1 ? " selected" : " selected");
+        });
+    });
+}
+
 async function createGroupChat() {
     if (!session) return;
 
-    const name = prompt("Group name");
-    if (!name?.trim()) return;
+    const name = $("group-create-name")?.value.trim();
+    const list = $("group-create-friends");
+    const error = $("group-create-error");
+    const selected = [...(list?.querySelectorAll('input[type="checkbox"]:checked') || [])].map((input) => input.value);
 
-    const rawUsers = prompt("Enter member usernames separated by commas");
-    const usernames = [...new Set((rawUsers || "")
-        .split(",")
-        .map((value) => value.trim().replace(/^@/, ""))
-        .filter(Boolean))];
-
-    if (!usernames.length) {
-        alert("Add at least one other member by username.");
+    if (!name) {
+        error.textContent = "Enter a group name.";
         return;
     }
 
-    const result = await sb.from("profiles")
-        .select("id,username,display_name,avatar_url")
-        .in("username", usernames)
-        .neq("id", session.user.id);
-
-    if (result.error) {
-        alert(result.error.message);
+    if (!selected.length) {
+        error.textContent = "Select at least one friend.";
         return;
     }
 
-    const profiles = result.data || [];
-    if (!profiles.length) {
-        alert("None of those usernames were found.");
-        return;
-    }
+    error.textContent = "";
+    $("group-create-submit").disabled = true;
+    $("group-create-submit").textContent = "Creating...";
 
     const groupResult = await sb.from("group_conversations")
-        .insert({ name: name.trim().slice(0, 80), created_by: session.user.id })
+        .insert({ name: name.slice(0, 80), created_by: session.user.id })
         .select()
         .single();
 
     if (groupResult.error) {
-        alert(groupResult.error.message);
+        error.textContent = groupResult.error.message;
+        $("group-create-submit").disabled = false;
+        $("group-create-submit").textContent = "Create group";
         return;
     }
 
-    const memberIds = [...new Set([session.user.id, ...profiles.map((profile) => profile.id)])];
+    const memberIds = [...new Set([session.user.id, ...selected])];
     const memberResult = await sb.from("group_members").insert(memberIds.map((userId) => ({
         group_id: groupResult.data.id,
         user_id: userId,
@@ -1599,10 +1644,15 @@ async function createGroupChat() {
     })));
 
     if (memberResult.error) {
-        alert(memberResult.error.message);
+        error.textContent = memberResult.error.message;
+        $("group-create-submit").disabled = false;
+        $("group-create-submit").textContent = "Create group";
         return;
     }
 
+    close("group-create-modal");
+    $("group-create-submit").disabled = false;
+    $("group-create-submit").textContent = "Create group";
     await loadGroupChats();
     await openGroupChat(groupResult.data.id);
 }
