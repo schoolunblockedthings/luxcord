@@ -330,6 +330,7 @@ function bind() {
 
     $("avatar-crop-apply")?.addEventListener("click", applyAvatarCrop);
     $("avatar-crop-cancel")?.addEventListener("click", cancelAvatarCrop);
+    $("avatar-crop-cancel-2")?.addEventListener("click", cancelAvatarCrop);
 
     const cropCanvas = $("avatar-crop-canvas");
     cropCanvas?.addEventListener("pointerdown", (event) => {
