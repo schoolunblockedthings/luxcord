@@ -1562,7 +1562,7 @@ async function refreshDM() {
             margin:0;
             padding:0;
         "
-    >${avatar}</div>
+    onclick="openUserProfile('${message.sender_id}')">${avatar}</div>
 
     <div
         class="message-body"
@@ -1599,7 +1599,7 @@ async function refreshDM() {
                 padding:0;
                 line-height:18px;
             "
-        >${esc(name)}</b><time
+        onclick="openUserProfile('${message.sender_id}')" class="clickable-name">${esc(name)}</b><time
             style="
                 display:inline;
                 margin:0;
