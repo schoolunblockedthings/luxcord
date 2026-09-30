@@ -615,12 +615,12 @@ async function refreshRoom() {
                 return `
                     <article class="message">
 
-                        ${avatarHTML(roomProfileMap[message.user_id] || { display_name: message.name }, "message-avatar")}
+                        <span class="clickable-avatar" onclick="openUserProfile('${message.user_id}')">${avatarHTML(roomProfileMap[message.user_id] || { display_name: message.name }, "message-avatar")}</span>
 
                         <div class="message-body">
 
                             <div class="message-head">
-                                <b>
+                                <b class="clickable-name" onclick="openUserProfile('${message.user_id}')">
                                     ${esc(
                                         message.name
                                     )}
