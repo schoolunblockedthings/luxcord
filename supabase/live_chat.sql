@@ -102,3 +102,28 @@ end $;
 alter table public.profiles add column if not exists last_seen_at timestamptz;
 alter table public.profiles add column if not exists avatar_url text;
 
+
+
+-- Private notes that each user can keep about other profiles.
+create table if not exists public.profile_notes (
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    profile_id uuid not null references public.profiles(id) on delete cascade,
+    notes text not null default '',
+    created_at timestamptz not null default timezone('utc', now()),
+    updated_at timestamptz not null default timezone('utc', now()),
+    primary key (user_id, profile_id),
+    constraint profile_notes_not_self check (user_id <> profile_id)
+);
+
+alter table public.profile_notes enable row level security;
+
+drop policy if exists "Profile notes own rows" on public.profile_notes;
+create policy "Profile notes own rows"
+on public.profile_notes
+for all
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create index if not exists profile_notes_profile_idx
+    on public.profile_notes (profile_id);
