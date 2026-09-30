@@ -393,7 +393,7 @@ function bind() {
     $("group-add-people")?.addEventListener("click", openGroupAddModal);
     $("group-add-cancel")?.addEventListener("click", () => close("group-add-modal"));
     $("group-add-submit")?.addEventListener("click", addGroupPeople);
-    $("group-leave")?.addEventListener("click", leaveGroup);
+    $("group-leave")?.addEventListener("click", (event) => window.leaveGroup(event));
 
     $("home-room")?.addEventListener(
         "click",
@@ -1792,18 +1792,26 @@ async function openGroupAddModal() {
     error.textContent = "";
 }
 
-async function leaveGroup() {
+window.leaveGroup = async function(event) {
+    event?.preventDefault();
+    event?.stopPropagation();
     if (!session || !groupChat) return;
-    if (!confirm("Leave " + groupChat.name + "? You won't receive messages from this group anymore.")) return;
 
     const groupId = groupChat.id;
+    const groupName = groupChat.name;
+    if (!confirm("Leave " + groupName + "? You won't receive messages from this group anymore.")) return;
+
+    const button = $("group-leave");
+    if (button) { button.disabled = true; button.textContent = "Leaving..."; }
+
     const result = await sb.from("group_members")
         .delete()
         .eq("group_id", groupId)
         .eq("user_id", session.user.id);
 
     if (result.error) {
-        alert(result.error.message);
+        if (button) { button.disabled = false; button.textContent = "Leave group"; }
+        alert("Could not leave group: " + result.error.message);
         return;
     }
 
@@ -1814,8 +1822,9 @@ async function leaveGroup() {
     close("dm-messages");
     close("dm-composer");
     open("dm-empty");
+    view("dms");
     await loadGroupChats();
-}
+};
 
 async function addGroupPeople() {
     if (!session || !groupChat) return;
