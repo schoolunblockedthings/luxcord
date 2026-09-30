@@ -404,6 +404,7 @@ async function createRoom() {
 
 async function joinRoom(roomCode, name) {
     room = roomCode;
+    luxSubscribeRoomTyping();
 
     // Fixed:
     // The old code referenced #room-display even though
@@ -1534,6 +1535,8 @@ async function refreshDM() {
             "
         >${esc(message.message)}</div>
 
+        ${message.sender_id === session.user.id ? `<div class="dm-read-state">${message.read_at ? "Seen" : "Sent"}</div>` : ""}
+
         <div
             class="message-actions"
             style="
@@ -1633,7 +1636,11 @@ async function sendDM() {
         target,
         "dm",
         "New direct message",
-        `${me.display_name || me.username} sent you a message.`
+        `${me.display_name || me.username} sent you a message.`,
+        {
+            conversation_id: dm.id,
+            sender_id: session.user.id
+        }
     );
 
     await refreshDM();
@@ -1997,6 +2004,12 @@ setInterval(() => {
 
 
 /* LIVE CHAT ENHANCEMENTS */
+let luxRoomChannel=null,luxRoomTypingTimer=null,luxRoomTypingUsers=new Set();
+function luxSubscribeRoomTyping(){if(!session||!room)return;if(luxRoomChannel)sb.removeChannel(luxRoomChannel);luxRoomChannel=sb.channel("luxcord-room-typing-"+room).on("broadcast",{event:"typing"},({payload})=>{if(!payload||payload.user_id===session.user.id)return;if(payload.typing)luxRoomTypingUsers.add(payload.user_id);else luxRoomTypingUsers.delete(payload.user_id);const label=$("typing-label");if(label)label.textContent=luxRoomTypingUsers.size?(payload.username+" is typing…"):"";}).subscribe();}
+async function luxSendRoomTyping(t){if(luxRoomChannel&&session)await luxRoomChannel.send({type:"broadcast",event:"typing",payload:{user_id:session.user.id,username:me?.username||"User",typing:t}});}
+function luxBindRoomTyping(){const input=$("message-input");if(!input||input.dataset.luxTyping)return;input.dataset.luxTyping="1";input.addEventListener("input",()=>{luxSendRoomTyping(true);clearTimeout(luxRoomTypingTimer);luxRoomTypingTimer=setTimeout(()=>luxSendRoomTyping(false),1200);});input.addEventListener("blur",()=>luxSendRoomTyping(false));}
+setInterval(luxBindRoomTyping,500);
+
 let luxPresenceChannel=null,luxDMChannel=null,luxTypingTimer=null,luxTypingUsers=new Set();
 function luxRegisterNotifications(){if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(console.warn);}
 async function luxMarkDMRead(){if(!dm||!session||$("dms-view")?.classList.contains("hidden"))return;const r=await sb.rpc("mark_dm_messages_read",{p_conversation_id:dm.id});if(r.error)console.warn("DM read receipt:",r.error.message);}
