@@ -84,13 +84,19 @@ insert into storage.buckets (id,name,public)
 values ('luxcord-attachments','luxcord-attachments',true)
 on conflict (id) do nothing;
 
-create policy if not exists "Luxcord attachments upload"
-on storage.objects for insert to authenticated
-with check (bucket_id='luxcord-attachments' and owner_id=auth.uid()::text);
-
-create policy if not exists "Luxcord attachments read"
-on storage.objects for select to public
-using (bucket_id='luxcord-attachments');
+do $
+begin
+    if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='Luxcord attachments upload') then
+        create policy "Luxcord attachments upload"
+        on storage.objects for insert to authenticated
+        with check (bucket_id='luxcord-attachments' and owner_id=auth.uid()::text);
+    end if;
+    if not exists (select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='Luxcord attachments read') then
+        create policy "Luxcord attachments read"
+        on storage.objects for select to public
+        using (bucket_id='luxcord-attachments');
+    end if;
+end $;
 
 
 alter table public.profiles add column if not exists last_seen_at timestamptz;
