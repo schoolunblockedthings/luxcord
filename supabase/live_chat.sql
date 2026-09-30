@@ -48,3 +48,46 @@ begin
 exception when undefined_object then
     null;
 end $$;
+
+
+-- Additional messaging features
+alter table public.dm_messages add column if not exists edited_at timestamptz;
+alter table public.dm_messages add column if not exists deleted_at timestamptz;
+alter table public.dm_messages add column if not exists reply_to_id bigint references public.dm_messages(id) on delete set null;
+alter table public.dm_messages add column if not exists attachment_url text;
+alter table public.dm_messages add column if not exists attachment_name text;
+
+create index if not exists dm_messages_reply_idx on public.dm_messages(reply_to_id);
+
+create or replace function public.edit_dm_message(p_message_id bigint, p_message text)
+returns void language plpgsql security definer set search_path=public as $$
+begin
+ update public.dm_messages
+ set message=left(trim(p_message), 4000), edited_at=timezone('utc', now())
+ where id=p_message_id and sender_id=auth.uid() and deleted_at is null;
+end $$;
+
+create or replace function public.delete_dm_message(p_message_id bigint)
+returns void language plpgsql security definer set search_path=public as $$
+begin
+ update public.dm_messages
+ set message='', deleted_at=timezone('utc', now()), edited_at=null
+ where id=p_message_id and sender_id=auth.uid() and deleted_at is null;
+end $$;
+
+revoke all on function public.edit_dm_message(bigint,text) from public;
+grant execute on function public.edit_dm_message(bigint,text) to authenticated;
+revoke all on function public.delete_dm_message(bigint) from public;
+grant execute on function public.delete_dm_message(bigint) to authenticated;
+
+insert into storage.buckets (id,name,public)
+values ('luxcord-attachments','luxcord-attachments',true)
+on conflict (id) do nothing;
+
+create policy if not exists "Luxcord attachments upload"
+on storage.objects for insert to authenticated
+with check (bucket_id='luxcord-attachments' and owner_id=auth.uid()::text);
+
+create policy if not exists "Luxcord attachments read"
+on storage.objects for select to public
+using (bucket_id='luxcord-attachments');
