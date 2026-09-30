@@ -631,6 +631,27 @@
 </div>
 
 <!-- USER PROFILE MODAL -->
+<div id="group-create-modal" class="modal hidden">
+    <div class="modal-card group-create-card">
+        <button class="x modal-close" type="button">×</button>
+        <h2>Create group chat</h2>
+        <p class="muted">Give your group a name and choose which friends to add.</p>
+        <label class="group-create-label">Group name
+            <input id="group-create-name" maxlength="80" placeholder="e.g. Weekend plans">
+        </label>
+        <div class="group-create-friends-head">
+            <b>Select friends</b>
+            <span id="group-create-selected">0 selected</span>
+        </div>
+        <div id="group-create-friends" class="group-create-friends"></div>
+        <div id="group-create-error" class="group-create-error"></div>
+        <div class="group-create-actions">
+            <button id="group-create-cancel" class="secondary" type="button">Cancel</button>
+            <button id="group-create-submit" class="primary" type="button">Create group</button>
+        </div>
+    </div>
+</div>
+
 <div id="user-profile-modal" class="modal hidden">
     <div class="modal-card user-profile-card">
         <button class="x modal-close" type="button">×</button>
