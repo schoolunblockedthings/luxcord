@@ -218,6 +218,12 @@ on public.group_members for insert
 to authenticated
 with check (group_id in (select private.user_group_ids()));
 
+drop policy if exists "Group members can leave" on public.group_members;
+create policy "Group members can leave"
+on public.group_members for delete
+to authenticated
+using (user_id = (select auth.uid()) and group_id in (select private.user_group_ids()));
+
 drop policy if exists "Group members can read messages" on public.group_messages;
 create policy "Group members can read messages"
 on public.group_messages for select
