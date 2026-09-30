@@ -389,6 +389,7 @@ function bind() {
 
     $("new-group-chat")?.addEventListener("click", openGroupCreateModal);
     $("group-create-cancel")?.addEventListener("click", () => close("group-create-modal"));
+    $("group-create-submit")?.addEventListener("click", createGroupChat);
 
     $("home-room")?.addEventListener(
         "click",
