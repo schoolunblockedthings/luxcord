@@ -498,6 +498,27 @@ async function refreshRoom() {
 
     const messages = result.data || [];
 
+    const roomUserIds = [
+        ...new Set(
+            messages
+                .map((message) => message.user_id)
+                .filter(Boolean)
+        )
+    ];
+
+    let roomProfiles = [];
+    if (roomUserIds.length) {
+        const profileResult = await sb
+            .from("profiles")
+            .select("id,username,display_name,avatar_url")
+            .in("id", roomUserIds);
+        roomProfiles = profileResult.data || [];
+    }
+
+    const roomProfileMap = Object.fromEntries(
+        roomProfiles.map((profile) => [profile.id, profile])
+    );
+
     let reactions = [];
 
     if (session && messages.length) {
@@ -554,11 +575,7 @@ async function refreshRoom() {
                 return `
                     <article class="message">
 
-                        <div class="message-avatar">
-                            ${esc(
-                                (message.name || "?")[0]
-                            )}
-                        </div>
+                        ${avatarHTML(roomProfileMap[message.user_id] || { display_name: message.name }, "message-avatar")}
 
                         <div class="message-body">
 
