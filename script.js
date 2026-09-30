@@ -2177,7 +2177,7 @@ setupRealtime=function(){
 document.addEventListener("visibilitychange",async()=>{
     if(!session)return;
     if(document.hidden){
-        await luxPresenceChannel?.untrack();
+        // A background tab is still an open tab, so keep presence tracked.
         luxSetTypingLabel("typing-label","");
         luxSetTypingLabel("dm-typing-label","");
     }else{
