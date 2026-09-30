@@ -222,11 +222,24 @@ function bind() {
 
     $("notification-btn")?.addEventListener(
         "click",
-        () => {
-            open("notification-panel");
-            loadNotifications();
+        (event) => {
+            event.stopPropagation();
+            const panel = $("notification-panel");
+            if (!panel) return;
+            if (panel.classList.contains("hidden")) {
+                open("notification-panel");
+                loadNotifications();
+            } else {
+                close("notification-panel");
+            }
         }
     );
+
+    $("notification-panel")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+    });
+
+    document.addEventListener("click", () => close("notification-panel"));
 
     $("clear-notifications")?.addEventListener(
         "click",
@@ -1789,7 +1802,8 @@ async function openUserProfile(userId) {
     $("user-profile-avatar").innerHTML = avatarHTML(profile, "profile-popup-avatar");
     $("user-profile-name").textContent = profile.display_name || profile.username || "User";
     $("user-profile-username").textContent = "@" + (profile.username || "user");
-    $("user-profile-status").textContent = profile.status || "Online";
+    const profileOnline = luxIsOnline(profile.id);
+    $("user-profile-status").textContent = profileOnline ? "Online now" : "Offline";
     $("user-profile-bio").textContent = profile.bio || "No bio yet.";
     const notes = await sb.from("profile_notes").select("notes").eq("user_id", session.user.id).eq("profile_id", userId).maybeSingle();
     $("user-profile-notes").value = notes.data?.notes || "";
@@ -1964,9 +1978,6 @@ function openProfile() {
     $("profile-display-name").value =
         me.display_name || "";
 
-    $("profile-status").value =
-        me.status || "Online";
-
     $("profile-bio").value =
         me.bio || "";
     if ($("profile-avatar-file")) $("profile-avatar-file").value = "";
@@ -2006,7 +2017,6 @@ async function saveProfile() {
     const result = await sb.from("profiles").update({
         username,
         display_name: $("profile-display-name").value.trim() || username,
-        status: $("profile-status").value.trim() || "Online",
         bio: $("profile-bio").value.trim(),
         avatar_url: avatarUrl
     }).eq("id", session.user.id).select().single();
