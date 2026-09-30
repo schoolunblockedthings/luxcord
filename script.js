@@ -1557,6 +1557,25 @@ async function refreshDM() {
 }
 
 
+async function uploadDMAttachment(file){
+    if(!file||!session)return null;
+    if(file.size>15*1024*1024){
+        alert("Attachments must be 15 MB or smaller.");
+        return null;
+    }
+    const safeName=(file.name||"attachment").replace(/[^a-zA-Z0-9._-]/g,"_");
+    const path=session.user.id+"/"+Date.now()+"-"+safeName;
+    const upload=await sb.storage.from("luxcord-attachments").upload(path,file,{upsert:false,contentType:file.type||"application/octet-stream"});
+    if(upload.error){
+        console.error("Attachment upload failed:",upload.error);
+        alert("Could not upload the file: "+upload.error.message);
+        return null;
+    }
+    const publicUrl=sb.storage.from("luxcord-attachments").getPublicUrl(path).data.publicUrl;
+    return {url:publicUrl,name:file.name};
+}
+
+
 async function sendDM(){if(!dm||!session)return;const input=$("dm-input");if(!input)return;const text=input.value.trim();const file=$("dm-file")?.files?.[0];if(!text&&!file)return;const attachment=file?await uploadDMAttachment(file):null;const result=await sb.from("dm_messages").insert({conversation_id:dm.id,sender_id:session.user.id,message:text||(attachment?.name||""),reply_to_id:reply?.id||null,attachment_url:attachment?.url||null,attachment_name:attachment?.name||null});if(result.error){alert(result.error.message);return;}input.value="";if($("dm-file"))$("dm-file").value="";reply=null;$("dm-reply-bar")?.classList.add("hidden");const target=dm.user_a===session.user.id?dm.user_b:dm.user_a;await notify(target,"dm","New direct message",`${me.display_name||me.username} sent you a message.`,{conversation_id:dm.id,sender_id:session.user.id});await refreshDM();}
 
 
