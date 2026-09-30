@@ -1899,3 +1899,20 @@ button {
 .group-online-dot.online{background:#39d98a;box-shadow:0 0 0 3px rgba(57,217,138,.10)}
 @media (max-width:850px){.dm-layout{grid-template-columns:minmax(0,1fr) 190px}}
 @media (max-width:600px){.dm-layout{grid-template-columns:minmax(0,1fr)}.group-members-panel{display:none!important}}
+
+.group-create-card{width:min(500px,92vw)}
+.group-create-label{display:block;margin-top:16px;font-size:13px;font-weight:700}
+.group-create-label input{width:100%;margin-top:7px}
+.group-create-friends-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px;font-size:13px}
+.group-create-friends-head span{color:#858da0;font-size:12px}
+.group-create-friends{max-height:300px;overflow:auto;border:1px solid var(--lx-border);border-radius:12px;padding:6px}
+.group-friend-option{display:flex;align-items:center;gap:10px;padding:9px;border-radius:9px;cursor:pointer}
+.group-friend-option:hover{background:rgba(255,255,255,.06)}
+.group-friend-option input{width:17px;height:17px;accent-color:#7566ee}
+.group-friend-avatar{width:34px;height:34px;min-width:34px;border-radius:50%;overflow:hidden;display:grid;place-items:center}
+.group-friend-avatar.avatar-photo{padding:0}
+.group-friend-option span{display:flex;flex-direction:column;min-width:0}
+.group-friend-option b{font-size:13px}
+.group-friend-option small{color:#858da0;font-size:11px;margin-top:2px}
+.group-create-error{min-height:18px;margin-top:9px;color:#ff7373;font-size:12px}
+.group-create-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
