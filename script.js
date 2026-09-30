@@ -319,6 +319,8 @@ function bind() {
         saveProfile
     );
 
+    $("save-user-profile-notes")?.addEventListener("click", saveUserProfileNotes);
+
     $("profile-avatar-file")?.addEventListener("change", (event) => {
         const file = event.target.files?.[0];
         if (file) openAvatarCrop(file);
@@ -548,7 +550,7 @@ async function refreshRoom() {
     if (roomUserIds.length) {
         const profileResult = await sb
             .from("profiles")
-            .select("id,username,display_name,avatar_url")
+            .select("id,username,display_name,status,bio,avatar_url")
             .in("id", roomUserIds);
         roomProfiles = profileResult.data || [];
     }
@@ -1338,7 +1340,7 @@ async function loadDMs() {
     if (ids.length) {
         const profileResult = await sb
             .from("profiles")
-            .select("id,username,display_name")
+            .select("id,username,display_name,bio,avatar_url")
             .in("id", ids);
 
         profiles = profileResult.data || [];
@@ -1418,7 +1420,7 @@ window.openDM = async function (id) {
 
     const targetProfile = await sb
         .from("profiles")
-        .select("id,username,display_name,status,avatar_url")
+        .select("id,username,display_name,status,bio,avatar_url")
         .eq("id", id)
         .maybeSingle();
     const dmProfile = targetProfile.data || { id, display_name: "User" };
@@ -1771,6 +1773,31 @@ window.reactDM = async function (
 };
 
 
+async function openUserProfile(userId) {
+    if (!session || !userId || String(userId) === String(session.user.id)) return;
+    const result = await sb.from("profiles").select("id,username,display_name,status,bio,avatar_url,last_seen_at").eq("id", userId).maybeSingle();
+    if (result.error || !result.data) { alert(result.error?.message || "Profile not found."); return; }
+    const profile = result.data;
+    $("user-profile-avatar").innerHTML = avatarHTML(profile, "profile-popup-avatar");
+    $("user-profile-name").textContent = profile.display_name || profile.username || "User";
+    $("user-profile-username").textContent = "@" + (profile.username || "user");
+    $("user-profile-status").textContent = profile.status || "Online";
+    $("user-profile-bio").textContent = profile.bio || "No bio yet.";
+    const notes = await sb.from("profile_notes").select("notes").eq("user_id", session.user.id).eq("profile_id", userId).maybeSingle();
+    $("user-profile-notes").value = notes.data?.notes || "";
+    $("user-profile-notes-status").textContent = "";
+    $("user-profile-modal").dataset.profileId = userId;
+    open("user-profile-modal");
+}
+
+async function saveUserProfileNotes() {
+    const profileId = $("user-profile-modal")?.dataset.profileId;
+    if (!session || !profileId) return;
+    const notes = $("user-profile-notes").value.slice(0, 5000);
+    const result = await sb.from("profile_notes").upsert({ user_id: session.user.id, profile_id: profileId, notes }, { onConflict: "user_id,profile_id" });
+    if (result.error) { $("user-profile-notes-status").textContent = result.error.message; return; }
+    $("user-profile-notes-status").textContent = "Saved";
+}
 // =============================
 // AVATAR CROPPER
 // =============================
