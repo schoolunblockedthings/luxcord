@@ -1916,3 +1916,9 @@ button {
 .group-friend-option small{color:#858da0;font-size:11px;margin-top:2px}
 .group-create-error{min-height:18px;margin-top:9px;color:#ff7373;font-size:12px}
 .group-create-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+
+.group-add-people{width:100%;margin:8px 0 4px;border:1px dashed var(--lx-border-strong);background:transparent;color:#9a8cff;font-size:12px}
+.group-add-people:hover{background:#20242e}
+.group-member-row{gap:7px}
+.group-member-click{display:flex;align-items:center;gap:9px;min-width:0;flex:1;cursor:pointer}
+.group-member-add{width:24px;height:24px;min-width:24px;padding:0;border-radius:7px;font-size:16px;line-height:22px}
