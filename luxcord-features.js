@@ -102,12 +102,12 @@
 
   function setReply(kind, id, article) {
     const text = article.querySelector(".message-text")?.innerText || "message";
-    window.luxReplyTarget = {kind,id};
-    const bar = $("dm-reply-bar");
-    const label = $("dm-reply-text");
-    if (label) label.textContent = "Replying: " + text.slice(0,100);
-    if (bar) bar.classList.remove("hidden");
-    $("dm-input")?.focus();
+    if (typeof showDMReply === "function") showDMReply({kind,id,text});
+    else {
+      window.luxReplyTarget = {kind,id,text};
+      $("dm-reply-bar")?.classList.remove("hidden");
+      $("dm-reply-text") && ($("dm-reply-text").textContent = "Replying to: " + text.slice(0,120));
+    }
     toast("Reply selected");
   }
 
