@@ -1454,7 +1454,8 @@ async function notify(
     id,
     type,
     title,
-    body
+    body,
+    notificationData = {}
 ) {
     const result = await sb.rpc(
         "create_notification",
@@ -1467,7 +1468,7 @@ async function notify(
         }
     );
     if (!result.error) {
-        await luxSendPushNotification(id, title, body, { type, sender_id: session?.user?.id || null });
+        await luxSendPushNotification(id, title, body, { type, sender_id: session?.user?.id || null, ...notificationData });
     }
 }
 
@@ -2359,7 +2360,8 @@ async function sendDM() {
         target,
         "dm",
         "New direct message",
-        `${me.display_name || me.username} sent you a message.`
+        `${me.display_name || me.username} sent you a message.`,
+        { conversation_id: dm.id }
     );
 
     const container = $("dm-messages");
@@ -2497,6 +2499,20 @@ async function sendGroupMessage() {
     if (fileInput) fileInput.value = "";
     clearDMReply();
     luxTypingSend(false);
+    const membersResult = await sb.from("group_members")
+        .select("user_id")
+        .eq("group_id", groupChat.id)
+        .neq("user_id", session.user.id);
+    const senderName = me?.display_name || me?.username || "Someone";
+    for (const member of membersResult.data || []) {
+        await notify(
+            member.user_id,
+            "group",
+            groupChat.name || "New group message",
+            senderName + " sent a message in " + (groupChat.name || "your group") + ".",
+            { group_id: groupChat.id }
+        );
+    }
     await refreshGroupChat();
 }
 
