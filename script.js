@@ -3117,6 +3117,18 @@ async function luxStartTyping() {
     luxTypingChannel = sb.channel("luxcord-typing")
         .on("broadcast", { event: "typing" }, ({ payload }) => {
             if (!payload || payload.userId === session.user.id) return;
+
+            if (payload.kind === "dm-read") {
+                if (dm && String(payload.id) === String(dm.id)) {
+                    document.querySelectorAll('#dm-messages .message[data-message-kind="dm"] .dm-read-state').forEach(el => {
+                        const article = el.closest(".message");
+                        const senderId = article?.querySelector(".clickable-name")?.getAttribute("onclick")?.match(/'([^']+)'/)?.[1];
+                        if (String(senderId) === String(session.user.id)) el.textContent = "Seen";
+                    });
+                }
+                return;
+            }
+
             const key = payload.kind + ":" + payload.id + ":" + payload.userId;
             if (payload.typing) {
                 luxTypingUsers.set(key, {
@@ -3140,9 +3152,29 @@ let luxPresenceChannel = null;
 let luxPresenceReady = false;
 async function luxMarkDMRead() {
     if (!dm || !session || groupChat) return;
+    const conversationId = String(dm.id);
     const result = await sb.rpc("mark_dm_messages_read", { p_conversation_id: dm.id });
     if (result.error) {
         console.warn("DM read receipt:", result.error.message);
+        return;
+    }
+
+    // Broadcast immediately so the sender's UI can show Seen without
+    // depending on Postgres realtime UPDATE payloads containing old read_at.
+    if (luxTypingChannel) {
+        try {
+            await luxTypingChannel.send({
+                type: "broadcast",
+                event: "typing",
+                payload: {
+                    kind: "dm-read",
+                    id: conversationId,
+                    userId: session.user.id
+                }
+            });
+        } catch (e) {
+            console.warn("DM read broadcast:", e);
+        }
     }
 }
 function luxIsOnline(userId) {
