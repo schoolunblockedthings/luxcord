@@ -317,7 +317,7 @@
     sb.from("profiles").update({last_seen_at:new Date().toISOString()}).eq("id",session.user.id);
   }
 
-  const callState = { channel:null, pc:null, local:null, remote:null, peerId:null, conversationId:null, muted:false, ringing:false };
+  const callState = { channel:null, pc:null, local:null, remote:null, peerId:null, conversationId:null, muted:false, ringing:false, pendingIce:[] };
 
   function dmPeerId() {
     if (!dm || !session) return null;
@@ -340,38 +340,84 @@
 
   async function stopCall(sendHangup=true) {
     const peer = callState.peerId, cid = callState.conversationId, ch = callState.channel;
-    if (sendHangup && ch && peer) { try { await ch.send({type:"broadcast",event:"call-signal",payload:{type:"hangup",from:session.user.id,to:peer,conversation_id:cid}}); } catch(e) {} }
+    if (sendHangup && ch && peer) {
+      try { await ch.send({type:"broadcast",event:"call-signal",payload:{type:"hangup",from:session.user.id,to:peer,conversation_id:cid}}); } catch(e) {}
+    }
     callState.local?.getTracks().forEach(t=>t.stop());
     callState.pc?.close();
     if (callState.channel) sb.removeChannel(callState.channel);
-    callState.channel=null; callState.pc=null; callState.local=null; callState.remote=null; callState.peerId=null; callState.conversationId=null; callState.muted=false; callState.ringing=false;
+    callState.channel=null; callState.pc=null; callState.local=null; callState.remote=null;
+    callState.peerId=null; callState.conversationId=null; callState.muted=false; callState.ringing=false; callState.pendingIce=[];
     const box=callUI(); box.classList.add("hidden");
     if ($("lux-call-audio")) $("lux-call-audio").srcObject=null;
     const head=$("dm-conversation-head"); if(head) head.dataset.luxCall="";
   }
 
   async function ensureCallChannel(conversationId, peerId) {
-    if (callState.channel && callState.conversationId===String(conversationId)) return callState.channel;
+    const cid=String(conversationId);
+    if (callState.channel && callState.conversationId===cid) return callState.channel;
     if (callState.channel) sb.removeChannel(callState.channel);
-    const ch=sb.channel("luxcord-calls");
+
+    // One private signaling room per DM conversation prevents unrelated calls
+    // from sharing state and makes caller/receiver subscribe to the same room.
+    const ch=sb.channel("luxcord-call-"+cid);
     ch.on("broadcast",{event:"call-signal"}, async ({payload})=>{
-      if (!payload || String(payload.to)!==String(session.user.id) || String(payload.conversation_id)!==String(conversationId)) return;
-      if (payload.type==="offer") await receiveOffer(payload, peerId);
-      else if (payload.type==="answer" && callState.pc) { await callState.pc.setRemoteDescription(new RTCSessionDescription(payload.answer)); setCallStatus("Connected"); }
-      else if (payload.type==="ice" && callState.pc && payload.candidate) { try { await callState.pc.addIceCandidate(payload.candidate); } catch(e) {} }
-      else if (payload.type==="hangup") stopCall(false);
+      if (!payload || String(payload.to)!==String(session.user.id) || String(payload.conversation_id)!==cid) return;
+      if (payload.type==="offer") {
+        if (!callState.pc && !callState.ringing) await receiveOffer(payload, payload.from);
+      } else if (payload.type==="answer" && callState.pc) {
+        try {
+          await callState.pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+          setCallStatus("Connected");
+          await flushPendingIce();
+        } catch(e) { console.warn("Voice answer error:",e); }
+      } else if (payload.type==="ice" && callState.pc && payload.candidate) {
+        await queueOrAddIce(payload.candidate);
+      } else if (payload.type==="hangup") {
+        await stopCall(false);
+      }
     });
     await ch.subscribe();
-    callState.channel=ch; callState.conversationId=String(conversationId); callState.peerId=String(peerId);
+    callState.channel=ch; callState.conversationId=cid; callState.peerId=String(peerId);
     return ch;
+  }
+
+  async function queueOrAddIce(candidate) {
+    if (!candidate) return;
+    if (!callState.pc?.remoteDescription) {
+      callState.pendingIce.push(candidate);
+      return;
+    }
+    try { await callState.pc.addIceCandidate(candidate); } catch(e) { console.warn("Voice ICE error:",e); }
+  }
+
+  async function flushPendingIce() {
+    if (!callState.pc?.remoteDescription || !callState.pendingIce.length) return;
+    const pending=callState.pendingIce.splice(0);
+    for (const candidate of pending) {
+      try { await callState.pc.addIceCandidate(candidate); } catch(e) {}
+    }
   }
 
   function buildPeer(peerId, conversationId) {
     const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
     callState.pc=pc;
-    pc.onicecandidate=e=>{ if(e.candidate && callState.channel) callState.channel.send({type:"broadcast",event:"call-signal",payload:{type:"ice",from:session.user.id,to:peerId,conversation_id:String(conversationId),candidate:e.candidate}}); };
-    pc.ontrack=e=>{ callState.remote=e.streams[0]; const audio=$("lux-call-audio"); if(audio) audio.srcObject=e.streams[0]; };
-    pc.onconnectionstatechange=()=>{ if(["failed","disconnected","closed"].includes(pc.connectionState)) setCallStatus("Call ended"); };
+    pc.onicecandidate=e=>{
+      if(e.candidate && callState.channel) {
+        callState.channel.send({type:"broadcast",event:"call-signal",payload:{
+          type:"ice",from:session.user.id,to:peerId,conversation_id:String(conversationId),candidate:e.candidate
+        }});
+      }
+    };
+    pc.ontrack=e=>{
+      callState.remote=e.streams[0];
+      const audio=$("lux-call-audio");
+      if(audio) { audio.srcObject=e.streams[0]; audio.play?.().catch(()=>{}); }
+    };
+    pc.onconnectionstatechange=()=>{
+      if(pc.connectionState==="connected") setCallStatus("Connected");
+      else if(["failed","disconnected","closed"].includes(pc.connectionState)) setCallStatus("Call ended");
+    };
     if(callState.local) callState.local.getTracks().forEach(track=>pc.addTrack(track,callState.local));
     return pc;
   }
@@ -381,47 +427,80 @@
     return navigator.mediaDevices.getUserMedia({audio:true,video:false});
   }
 
+  function callButtons() {
+    $("lux-call-actions").innerHTML='<button type="button" class="lux-call-btn" id="lux-call-mute">🎙️ Mute</button><button type="button" class="lux-call-btn danger" id="lux-call-hangup">☎ Hang up</button>';
+    $("lux-call-mute").onclick=toggleCallMute;
+    $("lux-call-hangup").onclick=()=>stopCall(true);
+  }
+
   async function startVoiceCall() {
-    if (!dm || !session || callState.pc) return;
+    if (!dm || !session || callState.pc || callState.ringing) return;
     const peerId=dmPeerId(); if(!peerId) return;
     try {
       callState.local=await getMicrophone();
-      callState.peerId=String(peerId); callState.conversationId=String(dm.id);
+      callState.peerId=String(peerId); callState.conversationId=String(dm.id); callState.pendingIce=[];
       await ensureCallChannel(dm.id,peerId);
-      const pc=buildPeer(peerId,dm.id); const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-      const box=callUI(); box.classList.remove("hidden"); $("lux-call-title").textContent="Calling "+($("dm-conversation-name")?.textContent||"User"); setCallStatus("Calling…");
-      $("lux-call-actions").innerHTML='<button type="button" class="lux-call-btn" id="lux-call-mute">🎙️ Mute</button><button type="button" class="lux-call-btn danger" id="lux-call-hangup">☎ Hang up</button>';
-      $("lux-call-mute").onclick=toggleCallMute; $("lux-call-hangup").onclick=()=>stopCall(true);
-      await callState.channel.send({type:"broadcast",event:"call-signal",payload:{type:"offer",from:session.user.id,to:peerId,conversation_id:String(dm.id),offer}});
-    } catch(e) { console.error("Voice call error:",e); toast(e.message||"Could not start call"); await stopCall(false); }
+      const pc=buildPeer(peerId,dm.id);
+      const offer=await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const box=callUI();
+      box.classList.remove("hidden");
+      $("lux-call-title").textContent="Calling "+($("dm-conversation-name")?.textContent||"User");
+      setCallStatus("Calling…");
+      callButtons();
+      await callState.channel.send({type:"broadcast",event:"call-signal",payload:{
+        type:"offer",from:session.user.id,to:peerId,conversation_id:String(dm.id),offer
+      }});
+    } catch(e) {
+      console.error("Voice call error:",e);
+      toast(e.message||"Could not start call");
+      await stopCall(false);
+    }
   }
 
   async function receiveOffer(payload, peerId) {
     if (callState.pc || callState.ringing) return;
-    callState.ringing=true; callState.peerId=String(peerId); callState.conversationId=String(payload.conversation_id);
-    const box=callUI(); box.classList.remove("hidden"); $("lux-call-title").textContent="Incoming voice call"; setCallStatus("Someone is calling you…");
+    callState.ringing=true;
+    callState.peerId=String(peerId);
+    callState.conversationId=String(payload.conversation_id);
+    callState.pendingIce=[];
+    const box=callUI();
+    box.classList.remove("hidden");
+    $("lux-call-title").textContent="Incoming voice call";
+    setCallStatus("Someone is calling you…");
     $("lux-call-actions").innerHTML='<button type="button" class="lux-call-btn accept" id="lux-call-accept">📞 Accept</button><button type="button" class="lux-call-btn danger" id="lux-call-decline">Decline</button>';
-    $("lux-call-accept").onclick=async()=>{ try { callState.ringing=false; callState.local=await getMicrophone(); await ensureCallChannel(payload.conversation_id,peerId); const pc=buildPeer(peerId,payload.conversation_id); await pc.setRemoteDescription(new RTCSessionDescription(payload.offer)); const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); setCallStatus("Connected"); $("lux-call-actions").innerHTML='<button type="button" class="lux-call-btn" id="lux-call-mute">🎙️ Mute</button><button type="button" class="lux-call-btn danger" id="lux-call-hangup">☎ Hang up</button>'; $("lux-call-mute").onclick=toggleCallMute; $("lux-call-hangup").onclick=()=>stopCall(true); await callState.channel.send({type:"broadcast",event:"call-signal",payload:{type:"answer",from:session.user.id,to:peerId,conversation_id:String(payload.conversation_id),answer}}); } catch(e) { toast(e.message||"Could not answer call"); await stopCall(true); } };
+    $("lux-call-accept").onclick=async()=>{
+      try {
+        callState.ringing=false;
+        callState.local=await getMicrophone();
+        await ensureCallChannel(payload.conversation_id,peerId);
+        const pc=buildPeer(peerId,payload.conversation_id);
+        await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+        await flushPendingIce();
+        const answer=await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        setCallStatus("Connecting…");
+        callButtons();
+        await callState.channel.send({type:"broadcast",event:"call-signal",payload:{
+          type:"answer",from:session.user.id,to:peerId,conversation_id:String(payload.conversation_id),answer
+        }});
+      } catch(e) {
+        toast(e.message||"Could not answer call");
+        await stopCall(true);
+      }
+    };
     $("lux-call-decline").onclick=()=>stopCall(true);
   }
 
   function toggleCallMute() {
-    callState.muted=!callState.muted; callState.local?.getAudioTracks().forEach(t=>t.enabled=!callState.muted);
+    callState.muted=!callState.muted;
+    callState.local?.getAudioTracks().forEach(t=>t.enabled=!callState.muted);
     const btn=$("lux-call-mute"); if(btn) btn.textContent=callState.muted?"🔇 Unmute":"🎙️ Mute";
   }
 
   async function initCallSignaling() {
-    if (!session || callState.channel) return;
-    const ch=sb.channel("luxcord-calls");
-    ch.on("broadcast",{event:"call-signal"}, async ({payload})=>{
-      if (!payload || String(payload.to)!==String(session.user.id)) return;
-      if (payload.type==="offer") { if (!callState.pc && !callState.ringing) await receiveOffer(payload, payload.from); }
-      else if (payload.type==="answer" && callState.pc) await callState.pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
-      else if (payload.type==="ice" && callState.pc && payload.candidate) { try { await callState.pc.addIceCandidate(payload.candidate); } catch(e) {} }
-      else if (payload.type==="hangup") stopCall(false);
-    });
-    await ch.subscribe();
-    callState.channel=ch;
+    // Call signaling is created when a call starts or an incoming offer arrives.
+    // No global shared channel is needed; ensureCallChannel handles both sides.
   }
 
   function addDMCallControls() {
