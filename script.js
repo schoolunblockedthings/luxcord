@@ -1982,6 +1982,8 @@ async function refreshDM() {
                 return `
 <article
     class="message"
+    data-message-id="${message.id}"
+    data-message-kind="dm"
     style="
         display:grid;
         grid-template-columns:36px minmax(0,1fr);
@@ -2054,6 +2056,7 @@ async function refreshDM() {
 
         <div
             class="message-text"
+            data-message-content="${message.id}"
             style="
                 display:block;
                 width:100%;
@@ -2170,7 +2173,8 @@ async function sendDM() {
             sender_id: session.user.id,
             message: text || attachment?.name || "Attachment",
             attachment_url: attachment?.url || null,
-            attachment_name: attachment?.name || null
+            attachment_name: attachment?.name || null,
+            reply_to_id: window.luxReplyTarget?.kind === "dm" ? window.luxReplyTarget.id : null
         });
 
     if (result.error) {
@@ -2180,6 +2184,7 @@ async function sendDM() {
 
     input.value = "";
     if (fileInput) fileInput.value = "";
+    window.luxReplyTarget = null;
     luxTypingSend(false);
 
     const target =
@@ -2244,11 +2249,11 @@ async function refreshGroupChat() {
                 ? "Seen by " + readCounts[message.id]
                 : message.sender_id === session.user.id ? "Sent" : "";
             return `
-                <article class="message" style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;width:100%;margin:0 0 9px;padding:7px 9px;align-items:start">
+                <article class="message" data-message-id="${message.id}" data-message-kind="group" style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;width:100%;margin:0 0 9px;padding:7px 9px;align-items:start">
                     <div class="message-avatar" style="grid-column:1;grid-row:1;width:36px;height:36px;min-width:36px" onclick="openUserProfile('${esc(message.sender_id)}')">${avatarHTML(user, "message-avatar")}</div>
                     <div class="message-body" style="grid-column:2;grid-row:1;min-width:0">
                         <div class="message-head"><b class="clickable-name" onclick="openUserProfile('${esc(message.sender_id)}')">${esc(name)}</b><time>${esc(time)}</time></div>
-                        <div class="message-text">${renderMentionText(message.message, mentionProfiles)}</div>
+                        <div class="message-text">${message.deleted_at ? '<span class="message-deleted">Message deleted</span>' : renderMentionText(message.message, mentionProfiles) + (message.edited_at ? ' <span class="message-edited">(edited)</span>' : '')}</div>
                         <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${esc(seen)}</div>
                     </div>
                 </article>
@@ -2271,7 +2276,8 @@ async function sendGroupMessage() {
     const result = await sb.from("group_messages").insert({
         group_id: groupChat.id,
         sender_id: session.user.id,
-        message: text
+        message: text,
+        reply_to_id: window.luxReplyTarget?.kind === "group" ? window.luxReplyTarget.id : null
     });
 
     if (result.error) {
@@ -2280,6 +2286,7 @@ async function sendGroupMessage() {
     }
 
     input.value = "";
+    window.luxReplyTarget = null;
     luxTypingSend(false);
     await refreshGroupChat();
 }
@@ -2319,6 +2326,15 @@ window.reactDM = async function (
     }
 
     await refreshDM();
+};
+
+
+window.reactGroup = async function(id, emoji) {
+    if (!session || !groupChat) return;
+    const existing = await sb.from("group_reactions").select("id").eq("message_id", id).eq("user_id", session.user.id).eq("emoji", emoji).maybeSingle();
+    if (existing.data) await sb.from("group_reactions").delete().eq("id", existing.data.id);
+    else await sb.from("group_reactions").insert({group_id: groupChat.id, message_id:id, user_id:session.user.id, emoji});
+    await refreshGroupChat();
 };
 
 
