@@ -1510,6 +1510,11 @@ async function loadNotifications() {
             );
     }
 
+    // Keep the Home Screen app badge in sync with the same unread count.
+    if (navigator.setAppBadge) {
+        navigator.setAppBadge(unread.length).catch?.(() => {});
+    }
+
     if ($("notifications-list")) {
         $("notifications-list").innerHTML =
             notifications
@@ -1558,12 +1563,20 @@ async function loadNotifications() {
 
 window.readNotification =
     async function (id) {
-        await sb
+        if (!session || !id) return;
+
+        // Viewing a notification dismisses it from the in-app list and
+        // immediately removes it from the Home Screen badge count.
+        const result = await sb
             .from("notifications")
-            .update({
-                read: true
-            })
-            .eq("id", id);
+            .delete()
+            .eq("id", id)
+            .eq("user_id", session.user.id);
+
+        if (result.error) {
+            console.warn("Read notification:", result.error.message);
+            return;
+        }
 
         await loadNotifications();
     };
@@ -1574,15 +1587,18 @@ async function clearNotifications() {
         return;
     }
 
-    await sb
+    const result = await sb
         .from("notifications")
-        .update({
-            read: true
-        })
+        .delete()
         .eq(
             "user_id",
             session.user.id
         );
+
+    if (result.error) {
+        console.warn("Clear notifications:", result.error.message);
+        return;
+    }
 
     await loadNotifications();
 }
