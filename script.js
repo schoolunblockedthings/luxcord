@@ -3167,7 +3167,12 @@ setInterval(() => {
 // =============================
 // DM LIVE FALLBACK
 // =============================
-setInterval(() => {
+// Keep a small polling fallback alongside Supabase realtime so messages
+// still appear if a realtime event is delayed or dropped.
+setInterval(async () => {
+    if (session && (dm || groupChat) && !$("dms-view")?.classList.contains("hidden")) {
+        await refreshDM();
+    }
     luxRenderOnline();
 }, 3000);
 
