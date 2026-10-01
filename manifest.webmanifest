@@ -1,0 +1,11 @@
+{
+  "name": "Luxcord",
+  "short_name": "Luxcord",
+  "id": "/chat.html",
+  "start_url": "/chat.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111318",
+  "theme_color": "#111318",
+  "description": "Luxcord chat"
+}
