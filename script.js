@@ -1954,6 +1954,31 @@ async function refreshDM() {
             return;
         }
 
+        // The fallback timer runs every few seconds. Do not rebuild the DOM
+        // when the actual messages have not changed; rebuilding recreates
+        // images and causes their load/layout changes to move the scrollbar.
+        const luxMessageSignature = messages.map(message => [
+            message.id,
+            message.created_at,
+            message.sender_id,
+            message.message,
+            message.attachment_url,
+            message.attachment_name,
+            message.reply_to_id,
+            message.edited_at,
+            message.deleted_at
+        ].map(value => String(value ?? "")).join("|")).join("||");
+        if (container.dataset.luxMessageSignature === luxMessageSignature) {
+            messages.forEach(message => {
+                if (message.sender_id !== session.user.id) return;
+                const article = container.querySelector('[data-message-id="' + CSS.escape(String(message.id)) + '"]');
+                const readState = article?.querySelector(".dm-read-state");
+                if (readState) readState.textContent = message.read_at ? "Seen" : "Sent";
+            });
+            return;
+        }
+        container.dataset.luxMessageSignature = luxMessageSignature;
+
         const luxWasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 180;
         const luxScrollTopBeforeRender = container.scrollTop;
         const luxScrollHeightBeforeRender = container.scrollHeight;
