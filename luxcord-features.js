@@ -307,6 +307,106 @@
     sb.from("profiles").update({last_seen_at:new Date().toISOString()}).eq("id",session.user.id);
   }
 
+  const callState = { channel:null, pc:null, local:null, remote:null, peerId:null, conversationId:null, muted:false, ringing:false };
+
+  function dmPeerId() {
+    if (!dm || !session) return null;
+    return String(dm.user_a) === String(session.user.id) ? dm.user_b : dm.user_a;
+  }
+
+  function callUI() {
+    let box = $("lux-call-ui");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "lux-call-ui";
+      box.className = "lux-call-ui hidden";
+      box.innerHTML = '<div class="lux-call-title" id="lux-call-title">Voice call</div><div class="lux-call-status" id="lux-call-status"></div><div class="lux-call-actions" id="lux-call-actions"></div><audio id="lux-call-audio" autoplay></audio>';
+      document.body.appendChild(box);
+    }
+    return box;
+  }
+
+  function setCallStatus(text) { callUI(); if ($("lux-call-status")) $("lux-call-status").textContent = text; }
+
+  async function stopCall(sendHangup=true) {
+    const peer = callState.peerId, cid = callState.conversationId, ch = callState.channel;
+    if (sendHangup && ch && peer) { try { await ch.send({type:"broadcast",event:"call-signal",payload:{type:"hangup",from:session.user.id,to:peer,conversation_id:cid}}); } catch(e) {} }
+    callState.local?.getTracks().forEach(t=>t.stop());
+    callState.pc?.close();
+    if (callState.channel) sb.removeChannel(callState.channel);
+    callState.channel=null; callState.pc=null; callState.local=null; callState.remote=null; callState.peerId=null; callState.conversationId=null; callState.muted=false; callState.ringing=false;
+    const box=callUI(); box.classList.add("hidden");
+    if ($("lux-call-audio")) $("lux-call-audio").srcObject=null;
+    const head=$("dm-conversation-head"); if(head) head.dataset.luxCall="";
+  }
+
+  async function ensureCallChannel(conversationId, peerId) {
+    if (callState.channel && callState.conversationId===String(conversationId)) return callState.channel;
+    if (callState.channel) sb.removeChannel(callState.channel);
+    const ch=sb.channel("luxcord-call-"+String(conversationId)+"-"+String(session.user.id));
+    ch.on("broadcast",{event:"call-signal"}, async ({payload})=>{
+      if (!payload || String(payload.to)!==String(session.user.id) || String(payload.conversation_id)!==String(conversationId)) return;
+      if (payload.type==="offer") await receiveOffer(payload, peerId);
+      else if (payload.type==="answer" && callState.pc) await callState.pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+      else if (payload.type==="ice" && callState.pc && payload.candidate) { try { await callState.pc.addIceCandidate(payload.candidate); } catch(e) {} }
+      else if (payload.type==="hangup") stopCall(false);
+    });
+    await ch.subscribe();
+    callState.channel=ch; callState.conversationId=String(conversationId); callState.peerId=String(peerId);
+    return ch;
+  }
+
+  function buildPeer(peerId, conversationId) {
+    const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+    callState.pc=pc;
+    pc.onicecandidate=e=>{ if(e.candidate && callState.channel) callState.channel.send({type:"broadcast",event:"call-signal",payload:{type:"ice",from:session.user.id,to:peerId,conversation_id:String(conversationId),candidate:e.candidate}}); };
+    pc.ontrack=e=>{ callState.remote=e.streams[0]; const audio=$("lux-call-audio"); if(audio) audio.srcObject=e.streams[0]; };
+    pc.onconnectionstatechange=()=>{ if(["failed","disconnected","closed"].includes(pc.connectionState)) setCallStatus("Call ended"); };
+    if(callState.local) callState.local.getTracks().forEach(track=>pc.addTrack(track,callState.local));
+    return pc;
+  }
+
+  async function getMicrophone() {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Your browser does not support microphone calls.");
+    return navigator.mediaDevices.getUserMedia({audio:true,video:false});
+  }
+
+  async function startVoiceCall() {
+    if (!dm || !session || callState.pc) return;
+    const peerId=dmPeerId(); if(!peerId) return;
+    try {
+      callState.local=await getMicrophone();
+      callState.peerId=String(peerId); callState.conversationId=String(dm.id);
+      await ensureCallChannel(dm.id,peerId);
+      const pc=buildPeer(peerId,dm.id); const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+      const box=callUI(); box.classList.remove("hidden"); $("lux-call-title").textContent="Calling "+($("dm-conversation-name")?.textContent||"User"); setCallStatus("Calling…");
+      $("lux-call-actions").innerHTML='<button type="button" class="lux-call-btn" id="lux-call-mute">🎙️ Mute</button><button type="button" class="lux-call-btn danger" id="lux-call-hangup">☎ Hang up</button>';
+      $("lux-call-mute").onclick=toggleCallMute; $("lux-call-hangup").onclick=()=>stopCall(true);
+      await callState.channel.send({type:"broadcast",event:"call-signal",payload:{type:"offer",from:session.user.id,to:peerId,conversation_id:String(dm.id),offer}});
+    } catch(e) { console.error("Voice call error:",e); toast(e.message||"Could not start call"); await stopCall(false); }
+  }
+
+  async function receiveOffer(payload, peerId) {
+    if (callState.pc || callState.ringing) return;
+    callState.ringing=true; callState.peerId=String(peerId); callState.conversationId=String(payload.conversation_id);
+    const box=callUI(); box.classList.remove("hidden"); $("lux-call-title").textContent="Incoming voice call"; setCallStatus("Someone is calling you…");
+    $("lux-call-actions").innerHTML='<button type="button" class="lux-call-btn accept" id="lux-call-accept">📞 Accept</button><button type="button" class="lux-call-btn danger" id="lux-call-decline">Decline</button>';
+    $("lux-call-accept").onclick=async()=>{ try { callState.ringing=false; callState.local=await getMicrophone(); await ensureCallChannel(payload.conversation_id,peerId); const pc=buildPeer(peerId,payload.conversation_id); await pc.setRemoteDescription(new RTCSessionDescription(payload.offer)); const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); setCallStatus("Connected"); $("lux-call-actions").innerHTML='<button type="button" class="lux-call-btn" id="lux-call-mute">🎙️ Mute</button><button type="button" class="lux-call-btn danger" id="lux-call-hangup">☎ Hang up</button>'; $("lux-call-mute").onclick=toggleCallMute; $("lux-call-hangup").onclick=()=>stopCall(true); await callState.channel.send({type:"broadcast",event:"call-signal",payload:{type:"answer",from:session.user.id,to:peerId,conversation_id:String(payload.conversation_id),answer}}); } catch(e) { toast(e.message||"Could not answer call"); await stopCall(true); } };
+    $("lux-call-decline").onclick=()=>stopCall(true);
+  }
+
+  function toggleCallMute() {
+    callState.muted=!callState.muted; callState.local?.getAudioTracks().forEach(t=>t.enabled=!callState.muted);
+    const btn=$("lux-call-mute"); if(btn) btn.textContent=callState.muted?"🔇 Unmute":"🎙️ Mute";
+  }
+
+  function addDMCallControls() {
+    const head=$("dm-conversation-head"); if(!head || !dm || groupChat || !session) return;
+    if(head.dataset.luxCallControls==="1") return;
+    head.dataset.luxCallControls="1";
+    const btn=document.createElement("button"); btn.type="button"; btn.className="lux-call-header-btn"; btn.textContent="📞"; btn.title="Voice call"; btn.onclick=startVoiceCall; head.appendChild(btn);
+  }
+
   function addGroupTools() {
     if (!window.groupChat || !session) return;
     const head=$("dm-conversation-head");
@@ -328,7 +428,7 @@
     const target=$("dm-messages"); if(target){
       new MutationObserver(()=>setTimeout(decorateAll,0)).observe(target,{childList:true,subtree:true});
     }
-    setInterval(()=>{addComposerTools();addDragDrop();addProfileBlock();addStatusControl();addSettingsControls();addGroupTools();decorateAll()},1200); updateLastSeen(); setInterval(updateLastSeen,60000); document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")updateLastSeen();});
+    setInterval(()=>{addComposerTools();addDragDrop();addProfileBlock();addStatusControl();addSettingsControls();addGroupTools();addDMCallControls();decorateAll()},1200); updateLastSeen(); setInterval(updateLastSeen,60000); document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")updateLastSeen();});
   }
 
   document.addEventListener("DOMContentLoaded",observe);
