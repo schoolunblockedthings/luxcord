@@ -2943,7 +2943,10 @@ function setupRealtime() {
                 const newRow = payload.new || {};
                 const meaningfulFields = ["message","attachment_url","attachment_name","reply_to_id","edited_at","deleted_at","sender_id","conversation_id"];
                 const meaningfulChange = meaningfulFields.some(field => String(oldRow[field] ?? "") !== String(newRow[field] ?? ""));
-                if (!meaningfulChange) return;
+                const ownReadReceiptChanged =
+                    String(newRow.sender_id) === String(session?.user?.id) &&
+                    String(oldRow.read_at ?? "") !== String(newRow.read_at ?? "");
+                if (!meaningfulChange && !ownReadReceiptChanged) return;
                 refreshDM();
             }
         )
@@ -3085,8 +3088,9 @@ let luxPresenceReady = false;
 async function luxMarkDMRead() {
     if (!dm || !session || groupChat) return;
     const result = await sb.rpc("mark_dm_messages_read", { p_conversation_id: dm.id });
-    if (result.error) { console.warn("DM read receipt:", result.error.message); return; }
-    await refreshDM(); await loadDMs();
+    if (result.error) {
+        console.warn("DM read receipt:", result.error.message);
+    }
 }
 function luxIsOnline(userId) {
     if (!luxPresenceChannel || !userId) return false;
@@ -3153,12 +3157,7 @@ setInterval(() => {
 // =============================
 // DM LIVE FALLBACK
 // =============================
-setInterval(async () => {
-    if (session && (dm || groupChat) && !$("dms-view")?.classList.contains("hidden")) {
-        await refreshDM();
-        await luxMarkDMRead();
-        if (groupChat) await loadGroupMembers(groupChat.id);
-    }
+setInterval(() => {
     luxRenderOnline();
 }, 3000);
 
