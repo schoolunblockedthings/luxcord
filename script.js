@@ -1954,8 +1954,9 @@ async function refreshDM() {
             return;
         }
 
-        const luxSavedScrollDistance = container.scrollHeight - container.scrollTop - container.clientHeight;
-        const luxWasNearBottom = luxSavedScrollDistance < 150;
+        const luxWasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 180;
+        const luxScrollTopBeforeRender = container.scrollTop;
+        const luxScrollHeightBeforeRender = container.scrollHeight;
 
         container.innerHTML = messages
             .map((message) => {
@@ -2128,10 +2129,12 @@ async function refreshDM() {
 
         if (luxWasNearBottom || messages.length <= 1) {
             container.scrollTop = container.scrollHeight;
-        } else {
             requestAnimationFrame(() => {
-                if (container) container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight - luxSavedScrollDistance);
+                if (container) container.scrollTop = container.scrollHeight;
             });
+        } else {
+            const luxHeightDelta = container.scrollHeight - luxScrollHeightBeforeRender;
+            container.scrollTop = Math.max(0, luxScrollTopBeforeRender + luxHeightDelta);
         }
     } finally {
         dmRefreshing = false;
