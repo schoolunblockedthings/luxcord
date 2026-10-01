@@ -2103,7 +2103,7 @@ async function refreshDM() {
 
         ${message.attachment_url ? ("<a class=\"message-attachment-file\" href=\"" + esc(message.attachment_url) + "\" target=\"_blank\" rel=\"noopener\">📎 " + esc(message.attachment_name || "Download attachment") + "</a>") : ""}
 
-        <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${message.sender_id === session.user.id ? (message.read_at ? "Seen" : "Sent") : ""}</div>
+        <div class="dm-read-state" data-own="${message.sender_id === session.user.id ? "1" : "0"}" style="font-size:11px;opacity:.65;margin-top:2px;">${message.sender_id === session.user.id ? (message.read_at ? "Seen" : "Sent") : ""}</div>
 
         <div
             class="message-actions"
@@ -3120,10 +3120,8 @@ async function luxStartTyping() {
 
             if (payload.kind === "dm-read") {
                 if (dm && String(payload.id) === String(dm.id)) {
-                    document.querySelectorAll('#dm-messages .message[data-message-kind="dm"] .dm-read-state').forEach(el => {
-                        const article = el.closest(".message");
-                        const senderId = article?.querySelector(".clickable-name")?.getAttribute("onclick")?.match(/'([^']+)'/)?.[1];
-                        if (String(senderId) === String(session.user.id)) el.textContent = "Seen";
+                    document.querySelectorAll('#dm-messages .message[data-message-kind="dm"] .dm-read-state[data-own="1"]').forEach(el => {
+                        el.textContent = "Seen";
                     });
                 }
                 return;
