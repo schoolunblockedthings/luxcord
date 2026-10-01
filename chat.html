@@ -13,6 +13,11 @@
         rel="stylesheet"
         href="style.css"
     >
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#111318">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Luxcord">
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -741,6 +746,11 @@
             Enter sends messages
 
         </label>
+
+        <button id="enable-push-notifications" class="secondary wide" type="button">
+            Enable iPad notifications
+        </button>
+        <small id="push-notification-status" class="muted"></small>
 
 
         <label>
