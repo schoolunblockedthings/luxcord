@@ -1911,6 +1911,9 @@ async function refreshDM() {
         }
 
         const messages = result.data || [];
+        const replyIds = [...new Set(messages.map(m => m.reply_to_id).filter(Boolean))];
+        const replyResult = replyIds.length ? await sb.from("dm_messages").select("id,message,sender_id").in("id", replyIds) : {data:[]};
+        const replyMap = Object.fromEntries((replyResult.data || []).map(m => [m.id, m]));
         const dmMentionProfiles = await loadMentionProfiles(messages);
 
         const ids = [
@@ -2058,6 +2061,7 @@ async function refreshDM() {
 
         <div
             class="message-text"
+            <div class="message-reply-preview">${message.reply_to_id && replyMap[message.reply_to_id] ? '↪ <b>' + esc((profileMap[replyMap[message.reply_to_id]?.sender_id] || {}).display_name || "User") + ':</b> ' + esc(replyMap[message.reply_to_id]?.message || "") : ""}</div>
             data-message-content="${message.id}"
             style="
                 display:block;
@@ -2235,6 +2239,9 @@ async function refreshGroupChat() {
         if (result.error) { console.error("Group message load error:", result.error); return; }
 
         const messages = result.data || [];
+        const replyIds = [...new Set(messages.map(m => m.reply_to_id).filter(Boolean))];
+        const replyResult = replyIds.length ? await sb.from("group_messages").select("id,message,sender_id").in("id", replyIds) : {data:[]};
+        const replyMap = Object.fromEntries((replyResult.data || []).map(m => [m.id, m]));
         if (messages.length) {
             await sb.from("group_message_reads").upsert(
                 messages.map(message => ({
@@ -2276,6 +2283,7 @@ async function refreshGroupChat() {
                     <div class="message-avatar" style="grid-column:1;grid-row:1;width:36px;height:36px;min-width:36px" onclick="openUserProfile('${esc(message.sender_id)}')">${avatarHTML(user, "message-avatar")}</div>
                     <div class="message-body" style="grid-column:2;grid-row:1;min-width:0">
                         <div class="message-head"><b class="clickable-name" onclick="openUserProfile('${esc(message.sender_id)}')">${esc(name)}</b><time>${esc(time)}</time></div>
+                        <div class="message-reply-preview">${message.reply_to_id && replyMap[message.reply_to_id] ? '↪ <b>' + esc((profileMap[replyMap[message.reply_to_id]?.sender_id] || {}).display_name || "User") + ':</b> ' + esc(replyMap[message.reply_to_id]?.message || "") : ""}</div>
                         <div class="message-text">${message.deleted_at ? '<span class="message-deleted">Message deleted</span>' : renderMentionText(message.message, mentionProfiles) + (message.edited_at ? ' <span class="message-edited">(edited)</span>' : '')}</div>
                         <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${esc(seen)}</div>
                     </div>
