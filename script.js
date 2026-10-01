@@ -1735,7 +1735,7 @@ window.openGroupChat = async function (id) {
     open("dm-messages");
     open("dm-composer");
     open("group-members-panel");
-    $("dm-attach").style.display = "none";
+    $("dm-attach").style.display = "";
     $("dm-file").value = "";
     $("dm-input").placeholder = "Message the group...";
     $("dm-conversation-name").textContent = groupChat.name;
@@ -2140,7 +2140,7 @@ async function refreshDM() {
 
 
 async function uploadDMFile(file) {
-    if (!session || !dm || !file) return null;
+    if (!session || (!dm && !groupChat) || !file) return null;
     if (file.size > 25 * 1024 * 1024) { alert("Files must be 25 MB or smaller."); return null; }
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = "chat/" + session.user.id + "/" + Date.now() + "-" + safeName;
@@ -2285,6 +2285,7 @@ async function refreshGroupChat() {
                         <div class="message-head"><b class="clickable-name" onclick="openUserProfile('${esc(message.sender_id)}')">${esc(name)}</b><time>${esc(time)}</time></div>
                         <div class="message-reply-preview">${message.reply_to_id && replyMap[message.reply_to_id] ? '↪ <b>' + esc((profileMap[replyMap[message.reply_to_id]?.sender_id] || {}).display_name || "User") + ':</b> ' + esc(replyMap[message.reply_to_id]?.message || "") : ""}</div>
                         <div class="message-text">${message.deleted_at ? '<span class="message-deleted">Message deleted</span>' : renderMentionText(message.message, mentionProfiles) + (message.edited_at ? ' <span class="message-edited">(edited)</span>' : '')}</div>
+                        \${message.attachment_url ? '<a class="message-attachment-file" href="' + esc(message.attachment_url) + '" target="_blank" rel="noopener">' + esc(message.attachment_name || "Attachment") + '</a>' : ''}
                         <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${esc(seen)}</div>
                     </div>
                 </article>
@@ -2302,12 +2303,20 @@ async function sendGroupMessage() {
     const input = $("dm-input");
     if (!input) return;
     const text = input.value.trim();
-    if (!text) return;
-
+    const fileInput = $("dm-file");
+    const file = fileInput?.files?.[0] || null;
+    if (!text && !file) return;
+    let attachment = null;
+    if (file) {
+        attachment = await uploadDMFile(file);
+        if (!attachment) return;
+    }
     const result = await sb.from("group_messages").insert({
         group_id: groupChat.id,
         sender_id: session.user.id,
-        message: text,
+        message: text || attachment?.name || "Attachment",
+        attachment_url: attachment?.url || null,
+        attachment_name: attachment?.name || null,
         reply_to_id: window.luxReplyTarget?.kind === "group" ? window.luxReplyTarget.id : null
     });
 
@@ -2317,7 +2326,8 @@ async function sendGroupMessage() {
     }
 
     input.value = "";
-    window.luxReplyTarget = null;
+    if (fileInput) fileInput.value = "";
+    clearDMReply();
     luxTypingSend(false);
     await refreshGroupChat();
 }
