@@ -290,7 +290,7 @@
     const label=document.createElement("label"); label.id="lux-custom-status"; label.style.display="block"; label.style.marginTop="10px";
     label.innerHTML='Status message<input id="lux-status-input" maxlength="120" placeholder="What are you up to?">';
     bio.parentNode?.insertBefore(label,bio.nextSibling);
-    $("profile-modal")?.addEventListener("click",()=>{if($("lux-status-input"))$("lux-status-input").value=window.me?.status||""},{once:true});
+    $("profile-modal")?.addEventListener("click",()=>{if($("lux-status-input"))$("lux-status-input").value=me?.status||""},{once:true});
     const save=$("save-profile"); save?.addEventListener("click",async()=>{const v=$("lux-status-input")?.value.trim();if(window.session)await sb.from("profiles").update({status:v||null}).eq("id",session.user.id);});
   }
 
@@ -298,14 +298,37 @@
     const theme=$("setting-theme"); if(!theme || $("lux-accent"))return;
     const label=document.createElement("label"); label.id="lux-accent"; label.innerHTML='Accent color<select id="setting-accent"><option value="purple">Purple</option><option value="blue">Blue</option><option value="green">Green</option><option value="pink">Pink</option></select></label>';
     theme.parentNode?.after(label);
-    const save=$("save-settings"); save?.addEventListener("click",()=>{const a=$("setting-accent")?.value||"purple";document.body.dataset.accent=a;window.settings=window.settings||{};settings.accent=a;});
+    const save=$("save-settings"); save?.addEventListener("click",()=>{const a=$("setting-accent")?.value||"purple";document.body.dataset.accent=a;settings=settings||{};settings.accent=a;});
+  }
+
+
+  function updateLastSeen() {
+    if (!session) return;
+    sb.from("profiles").update({last_seen_at:new Date().toISOString()}).eq("id",session.user.id);
+  }
+
+  function addGroupTools() {
+    if (!window.groupChat || !session) return;
+    const head=$("dm-conversation-head");
+    if (!head || head.dataset.luxGroupTools==="1") return;
+    head.dataset.luxGroupTools="1";
+    const mute=document.createElement("button");
+    mute.type="button"; mute.className="lux-tool-btn"; mute.textContent="🔔"; mute.title="Mute group";
+    mute.addEventListener("click",()=>{
+      settings=settings||{}; settings.mutedGroups=settings.mutedGroups||{};
+      settings.mutedGroups[String(groupChat.id)]=!settings.mutedGroups[String(groupChat.id)];
+      mute.textContent=settings.mutedGroups[String(groupChat.id)]?"🔕":"🔔";
+      toast(settings.mutedGroups[String(groupChat.id)]?"Group muted":"Group unmuted");
+      if(session) sb.from("profiles").update({settings}).eq("id",session.user.id);
+    });
+    head.appendChild(mute);
   }
 
   function observe() {
     const target=$("dm-messages"); if(target){
       new MutationObserver(()=>setTimeout(decorateAll,0)).observe(target,{childList:true,subtree:true});
     }
-    setInterval(()=>{addComposerTools();addDragDrop();addProfileBlock();addStatusControl();addSettingsControls();decorateAll()},1200);
+    setInterval(()=>{addComposerTools();addDragDrop();addProfileBlock();addStatusControl();addSettingsControls();addGroupTools();decorateAll()},1200); updateLastSeen(); setInterval(updateLastSeen,60000); document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")updateLastSeen();});
   }
 
   document.addEventListener("DOMContentLoaded",observe);
