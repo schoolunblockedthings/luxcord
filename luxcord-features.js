@@ -404,9 +404,11 @@
     if (!session || callState.channel) return;
     const ch=sb.channel("luxcord-calls");
     ch.on("broadcast",{event:"call-signal"}, async ({payload})=>{
-      if (!payload || String(payload.to)!==String(session.user.id) || payload.type!=="offer") return;
-      if (callState.pc || callState.ringing) return;
-      await receiveOffer(payload, payload.from);
+      if (!payload || String(payload.to)!==String(session.user.id)) return;
+      if (payload.type==="offer") { if (!callState.pc && !callState.ringing) await receiveOffer(payload, payload.from); }
+      else if (payload.type==="answer" && callState.pc) await callState.pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+      else if (payload.type==="ice" && callState.pc && payload.candidate) { try { await callState.pc.addIceCandidate(payload.candidate); } catch(e) {} }
+      else if (payload.type==="hangup") stopCall(false);
     });
     await ch.subscribe();
     callState.channel=ch;
