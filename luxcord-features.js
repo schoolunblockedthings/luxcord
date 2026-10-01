@@ -347,7 +347,7 @@
     ch.on("broadcast",{event:"call-signal"}, async ({payload})=>{
       if (!payload || String(payload.to)!==String(session.user.id) || String(payload.conversation_id)!==String(conversationId)) return;
       if (payload.type==="offer") await receiveOffer(payload, peerId);
-      else if (payload.type==="answer" && callState.pc) await callState.pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+      else if (payload.type==="answer" && callState.pc) { await callState.pc.setRemoteDescription(new RTCSessionDescription(payload.answer)); setCallStatus("Connected"); }
       else if (payload.type==="ice" && callState.pc && payload.candidate) { try { await callState.pc.addIceCandidate(payload.candidate); } catch(e) {} }
       else if (payload.type==="hangup") stopCall(false);
     });
