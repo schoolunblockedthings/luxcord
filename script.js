@@ -2229,7 +2229,14 @@ async function sendDM() {
         `${me.display_name || me.username} sent you a message.`
     );
 
-    await refreshDM();
+    const container = $("dm-messages");
+    if (container) {
+        const keepBottom = () => { container.scrollTop = container.scrollHeight; };
+        requestAnimationFrame(keepBottom);
+        setTimeout(keepBottom, 0);
+        setTimeout(keepBottom, 50);
+        setTimeout(keepBottom, 150);
+    }
 }
 
 
