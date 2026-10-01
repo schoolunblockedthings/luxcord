@@ -2977,7 +2977,7 @@ function setupRealtime() {
                     String(conversationId) ===
                         String(dm.id)
                 ) {
-                    refreshDM();
+                    refreshDM().then(() => luxMarkDMRead());
                 }
             }
         )
@@ -3270,7 +3270,10 @@ async function luxSyncDMReadStates() {
 setInterval(async () => {
     if (session && (dm || groupChat) && !$("dms-view")?.classList.contains("hidden")) {
         await refreshDM();
-        if (dm && !groupChat) await luxSyncDMReadStates();
+        if (dm && !groupChat) {
+            await luxMarkDMRead();
+            await luxSyncDMReadStates();
+        }
     }
     luxRenderOnline();
 }, 3000);
