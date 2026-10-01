@@ -45,6 +45,102 @@ const close = (id) => {
     $(id)?.classList.add("hidden");
 };
 
+const LUXCORD_VAPID_PUBLIC_KEY = "BKePNHXm43R5RmY1fVkR0lPmFX-7YEBokShvVrRHxncqWRdj2tIq5E6u-iiPr3P89TmtMWi0FAO038ABSD1pHls";
+
+function luxBase64ToUint8Array(value) {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(character => character.charCodeAt(0)));
+}
+
+async function luxRegisterServiceWorker() {
+    if (!("serviceWorker" in navigator)) return null;
+    try {
+        return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    } catch (error) {
+        console.warn("Luxcord service worker:", error);
+        return null;
+    }
+}
+
+async function luxEnablePushNotifications() {
+    const status = $("push-notification-status");
+    if (!session) return false;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        if (status) status.textContent = "Push notifications are not supported on this device.";
+        return false;
+    }
+
+    const registration = await luxRegisterServiceWorker();
+    if (!registration) return false;
+
+    const permission = Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission();
+
+    if (permission !== "granted") {
+        if (status) status.textContent = "Notifications are blocked. Enable them in iPad Settings.";
+        return false;
+    }
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: luxBase64ToUint8Array(LUXCORD_VAPID_PUBLIC_KEY)
+        });
+    }
+
+    const json = subscription.toJSON();
+    const result = await sb.from("push_subscriptions").upsert({
+        user_id: session.user.id,
+        endpoint: subscription.endpoint,
+        p256dh: json.keys?.p256dh || "",
+        auth: json.keys?.auth || "",
+        updated_at: new Date().toISOString()
+    }, { onConflict: "endpoint" });
+
+    if (result.error) {
+        if (status) status.textContent = result.error.message;
+        return false;
+    }
+
+    if (navigator.setAppBadge) {
+        navigator.setAppBadge(document.querySelectorAll(".notification.unread").length || 0).catch?.(() => {});
+    }
+    if (status) status.textContent = "iPad notifications are enabled.";
+    return true;
+}
+
+async function luxRefreshPushStatus() {
+    const status = $("push-notification-status");
+    const button = $("enable-push-notifications");
+    if (!status || !button) return;
+    if (!session) {
+        button.disabled = true;
+        status.textContent = "";
+        return;
+    }
+    button.disabled = false;
+    if ("Notification" in window && Notification.permission === "granted") {
+        status.textContent = "Notifications are allowed. Tap to finish push setup if needed.";
+    } else {
+        status.textContent = "Add Luxcord to your Home Screen, then enable notifications here.";
+    }
+}
+
+async function luxSendPushNotification(targetUser, title, body, data = {}) {
+    if (!session || !targetUser) return;
+    try {
+        await sb.functions.invoke("push-notify", {
+            body: { target_user: targetUser, title, body, data }
+        });
+    } catch (error) {
+        console.warn("Luxcord push notification:", error);
+    }
+}
+
 const luxMentionState = new Map();
 
 function hideMentionDropdown(dropdownId) {
@@ -219,6 +315,8 @@ async function boot() {
     }
 
     bind();
+    await luxRegisterServiceWorker();
+    await luxRefreshPushStatus();
 
     if (room) {
         await joinRoom(
@@ -337,6 +435,13 @@ function bind() {
         "click",
         openSettings
     );
+
+    $("enable-push-notifications")?.addEventListener("click", async () => {
+        const button = $("enable-push-notifications");
+        if (button) button.disabled = true;
+        await luxEnablePushNotifications();
+        if (button) button.disabled = false;
+    });
 
     $("profile-btn")?.addEventListener(
         "click",
@@ -1351,7 +1456,7 @@ async function notify(
     title,
     body
 ) {
-    await sb.rpc(
+    const result = await sb.rpc(
         "create_notification",
         {
             target_user: id,
@@ -1361,6 +1466,9 @@ async function notify(
             notification_data: {}
         }
     );
+    if (!result.error) {
+        await luxSendPushNotification(id, title, body, { type, sender_id: session?.user?.id || null });
+    }
 }
 
 
