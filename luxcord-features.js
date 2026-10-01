@@ -317,7 +317,7 @@
     sb.from("profiles").update({last_seen_at:new Date().toISOString()}).eq("id",session.user.id);
   }
 
-  const callState = { channel:null, pc:null, local:null, remote:null, peerId:null, conversationId:null, muted:false, ringing:false, pendingIce:[] };
+  const callState = { channel:null, inboxChannel:null, pc:null, local:null, remote:null, peerId:null, conversationId:null, muted:false, ringing:false, pendingIce:[] };
 
   function dmPeerId() {
     if (!dm || !session) return null;
@@ -448,7 +448,8 @@
       $("lux-call-title").textContent="Calling "+($("dm-conversation-name")?.textContent||"User");
       setCallStatus("Calling…");
       callButtons();
-      await callState.channel.send({type:"broadcast",event:"call-signal",payload:{
+      const signalChannel=callState.inboxChannel || callState.channel;
+      await signalChannel.send({type:"broadcast",event:"call-signal",payload:{
         type:"offer",from:session.user.id,to:peerId,conversation_id:String(dm.id),offer
       }});
     } catch(e) {
@@ -499,8 +500,15 @@
   }
 
   async function initCallSignaling() {
-    // Call signaling is created when a call starts or an incoming offer arrives.
-    // No global shared channel is needed; ensureCallChannel handles both sides.
+    if (!session || callState.inboxChannel) return;
+    const inbox=sb.channel("luxcord-call-inbox-"+String(session.user.id));
+    inbox.on("broadcast",{event:"call-signal"},async ({payload})=>{
+      if (!payload || String(payload.to)!==String(session.user.id) || payload.type!=="offer") return;
+      if (callState.pc || callState.ringing) return;
+      await receiveOffer(payload,payload.from);
+    });
+    await inbox.subscribe();
+    callState.inboxChannel=inbox;
   }
 
   function addDMCallControls() {
