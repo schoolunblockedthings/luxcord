@@ -2937,17 +2937,14 @@ function setupRealtime() {
                 table: "dm_messages"
             },
             (payload) => {
-                const conversationId =
-                    payload.new?.conversation_id ||
-                    payload.old?.conversation_id;
-
-                if (
-                    dm &&
-                    String(conversationId) ===
-                        String(dm.id)
-                ) {
-                    refreshDM();
-                }
+                const conversationId = payload.new?.conversation_id || payload.old?.conversation_id;
+                if (!dm || String(conversationId) !== String(dm.id)) return;
+                const oldRow = payload.old || {};
+                const newRow = payload.new || {};
+                const meaningfulFields = ["message","attachment_url","attachment_name","reply_to_id","edited_at","deleted_at","sender_id","conversation_id"];
+                const meaningfulChange = meaningfulFields.some(field => String(oldRow[field] ?? "") !== String(newRow[field] ?? ""));
+                if (!meaningfulChange) return;
+                refreshDM();
             }
         )
 
