@@ -1982,3 +1982,6 @@ body[data-accent="blue"]{--lx-accent:#5c9dff}body[data-accent="green"]{--lx-acce
 .lux-call-header-btn{margin-left:8px;border:0;background:transparent;color:inherit;font-size:18px;cursor:pointer;padding:6px 9px;border-radius:8px}.lux-call-header-btn:hover{background:rgba(255,255,255,.08)}
 .lux-call-ui{position:fixed;right:24px;bottom:24px;z-index:10000;width:290px;padding:18px;border-radius:14px;background:var(--panel,#1d1f26);border:1px solid rgba(255,255,255,.12);box-shadow:0 14px 45px rgba(0,0,0,.35)}
 .lux-call-title{font-weight:700;font-size:16px}.lux-call-status{margin:7px 0 14px;color:#9da5b4;font-size:13px}.lux-call-actions{display:flex;gap:8px}.lux-call-btn{border:0;border-radius:9px;padding:9px 12px;cursor:pointer;background:rgba(255,255,255,.1);color:inherit}.lux-call-btn.accept{background:#35a86b;color:#fff}.lux-call-btn.danger{background:#c94b5b;color:#fff}.lux-call-ui audio{display:none}
+
+/* Keep DM chat position stable; refreshes should not animate the scroll. */
+#dm-messages { scroll-behavior: auto !important; }
