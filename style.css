@@ -1951,7 +1951,7 @@ button {
 body[data-accent="blue"]{--lx-accent:#5c9dff}body[data-accent="green"]{--lx-accent:#42d392}body[data-accent="pink"]{--lx-accent:#ff69b4}
 
 .message-reply-preview{
-    display:block;
+    display:none;
     max-width:min(560px,100%);
     margin:3px 0 4px;
     padding:5px 8px;
@@ -1965,6 +1965,7 @@ body[data-accent="blue"]{--lx-accent:#5c9dff}body[data-accent="green"]{--lx-acce
     overflow:hidden;
     text-overflow:ellipsis;
 }
+.message-reply-preview:not(:empty){display:block;}
 .message-reply-preview b{color:#b7bfd0}
 .reply-bar{
     display:flex;
