@@ -1954,11 +1954,8 @@ async function refreshDM() {
             return;
         }
 
-        const wasNearBottom =
-            container.scrollHeight -
-                container.scrollTop -
-                container.clientHeight <
-            150;
+        const luxSavedScrollDistance = container.scrollHeight - container.scrollTop - container.clientHeight;
+        const luxWasNearBottom = luxSavedScrollDistance < 150;
 
         container.innerHTML = messages
             .map((message) => {
@@ -2129,9 +2126,12 @@ async function refreshDM() {
             })
             .join("");
 
-        if (wasNearBottom || messages.length <= 1) {
-            container.scrollTop =
-                container.scrollHeight;
+        if (luxWasNearBottom || messages.length <= 1) {
+            container.scrollTop = container.scrollHeight;
+        } else {
+            requestAnimationFrame(() => {
+                if (container) container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight - luxSavedScrollDistance);
+            });
         }
     } finally {
         dmRefreshing = false;
@@ -2270,7 +2270,8 @@ async function refreshGroupChat() {
         const container = $("dm-messages");
         if (!container) return;
 
-        const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+        const luxSavedScrollDistance = container.scrollHeight - container.scrollTop - container.clientHeight;
+        const luxWasNearBottom = luxSavedScrollDistance < 150;
         container.innerHTML = messages.map(message => {
             const user = profileMap[message.sender_id] || {};
             const name = user.display_name || user.username || "User";
@@ -2292,7 +2293,13 @@ async function refreshGroupChat() {
             `;
         }).join("");
 
-        if (wasNearBottom || messages.length <= 1) container.scrollTop = container.scrollHeight;
+        if (luxWasNearBottom || messages.length <= 1) {
+            container.scrollTop = container.scrollHeight;
+        } else {
+            requestAnimationFrame(() => {
+                if (container) container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight - luxSavedScrollDistance);
+            });
+        }
     } finally {
         dmRefreshing = false;
     }
