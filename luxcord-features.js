@@ -343,7 +343,7 @@
   async function ensureCallChannel(conversationId, peerId) {
     if (callState.channel && callState.conversationId===String(conversationId)) return callState.channel;
     if (callState.channel) sb.removeChannel(callState.channel);
-    const ch=sb.channel("luxcord-call-"+String(conversationId)+"-"+String(session.user.id));
+    const ch=sb.channel("luxcord-calls");
     ch.on("broadcast",{event:"call-signal"}, async ({payload})=>{
       if (!payload || String(payload.to)!==String(session.user.id) || String(payload.conversation_id)!==String(conversationId)) return;
       if (payload.type==="offer") await receiveOffer(payload, peerId);
@@ -400,6 +400,18 @@
     const btn=$("lux-call-mute"); if(btn) btn.textContent=callState.muted?"🔇 Unmute":"🎙️ Mute";
   }
 
+  async function initCallSignaling() {
+    if (!session || callState.channel) return;
+    const ch=sb.channel("luxcord-calls");
+    ch.on("broadcast",{event:"call-signal"}, async ({payload})=>{
+      if (!payload || String(payload.to)!==String(session.user.id) || payload.type!=="offer") return;
+      if (callState.pc || callState.ringing) return;
+      await receiveOffer(payload, payload.from);
+    });
+    await ch.subscribe();
+    callState.channel=ch;
+  }
+
   function addDMCallControls() {
     const head=$("dm-conversation-head"); if(!head || !dm || groupChat || !session) return;
     if(head.dataset.luxCallControls==="1") return;
@@ -428,7 +440,7 @@
     const target=$("dm-messages"); if(target){
       new MutationObserver(()=>setTimeout(decorateAll,0)).observe(target,{childList:true,subtree:true});
     }
-    setInterval(()=>{addComposerTools();addDragDrop();addProfileBlock();addStatusControl();addSettingsControls();addGroupTools();addDMCallControls();decorateAll()},1200); updateLastSeen(); setInterval(updateLastSeen,60000); document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")updateLastSeen();});
+    setInterval(()=>{addComposerTools();addDragDrop();addProfileBlock();addStatusControl();addSettingsControls();addGroupTools();addDMCallControls();initCallSignaling();decorateAll()},1200); updateLastSeen(); setInterval(updateLastSeen,60000); document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")updateLastSeen();});
   }
 
   document.addEventListener("DOMContentLoaded",observe);
