@@ -2305,6 +2305,24 @@ async function refreshGroupChat() {
         const container = $("dm-messages");
         if (!container) return;
 
+        // The fallback timer also refreshes groups. Skip a full DOM rebuild
+        // when the messages themselves are unchanged so images cannot move
+        // the scrollbar while loading.
+        const luxGroupMessageSignature = messages.map(message => [
+            message.id,
+            message.created_at,
+            message.sender_id,
+            message.message,
+            message.attachment_url,
+            message.attachment_name,
+            message.reply_to_id,
+            message.edited_at,
+            message.deleted_at,
+            readCounts[message.id] || 0
+        ].map(value => String(value ?? "")).join("|")).join("||");
+        if (container.dataset.luxGroupMessageSignature === luxGroupMessageSignature) return;
+        container.dataset.luxGroupMessageSignature = luxGroupMessageSignature;
+
         const luxSavedScrollDistance = container.scrollHeight - container.scrollTop - container.clientHeight;
         const luxWasNearBottom = luxSavedScrollDistance < 150;
         container.innerHTML = messages.map(message => {
