@@ -151,7 +151,17 @@
       const href=attachment.href||"";
       if (/\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(href)) {
         const img=document.createElement("img");
-        img.src=href; img.alt=attachment.textContent||"Image"; img.loading="lazy"; img.className="lux-message-image";
+        img.src=href; img.alt=attachment.textContent||"Image"; img.loading="eager"; img.className="lux-message-image";
+        const container=article.closest("#dm-messages");
+        const wasNearBottom=container ? (container.scrollHeight - container.scrollTop - container.clientHeight < 180) : false;
+        const scrollDistance=container ? (container.scrollHeight - container.scrollTop - container.clientHeight) : 0;
+        const restoreScroll=()=>{
+          if (!container) return;
+          if (wasNearBottom) container.scrollTop=container.scrollHeight;
+          else container.scrollTop=Math.max(0,container.scrollHeight-container.clientHeight-scrollDistance);
+        };
+        img.addEventListener("load",restoreScroll,{once:true});
+        img.addEventListener("error",restoreScroll,{once:true});
         attachment.replaceWith(img);
       }
     }
