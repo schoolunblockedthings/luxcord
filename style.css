@@ -1949,3 +1949,29 @@ button {
 .lux-feature-toast.show{opacity:1;transform:translate(-50%,0)}
 .lux-drop-active{outline:2px dashed #8f7cff;outline-offset:-4px}
 body[data-accent="blue"]{--lx-accent:#5c9dff}body[data-accent="green"]{--lx-accent:#42d392}body[data-accent="pink"]{--lx-accent:#ff69b4}
+
+.message-reply-preview{
+    display:block;
+    max-width:min(560px,100%);
+    margin:3px 0 4px;
+    padding:5px 8px;
+    border-left:3px solid #7566ee;
+    border-radius:5px;
+    background:rgba(117,102,238,.10);
+    color:#8f98ab;
+    font-size:11px;
+    line-height:15px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+.message-reply-preview b{color:#b7bfd0}
+.reply-bar{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+.reply-bar button{
+    margin-left:auto;
+    cursor:pointer;
+}
