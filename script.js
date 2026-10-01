@@ -2059,9 +2059,9 @@ async function refreshDM() {
             "
         >${esc(time)}</time></div>
 
+        <div class="message-reply-preview">${message.reply_to_id && replyMap[message.reply_to_id] ? '↪ <b>' + esc((profileMap[replyMap[message.reply_to_id]?.sender_id] || {}).display_name || "User") + ':</b> ' + esc(replyMap[message.reply_to_id]?.message || "") : ""}</div>
         <div
             class="message-text"
-            <div class="message-reply-preview">${message.reply_to_id && replyMap[message.reply_to_id] ? '↪ <b>' + esc((profileMap[replyMap[message.reply_to_id]?.sender_id] || {}).display_name || "User") + ':</b> ' + esc(replyMap[message.reply_to_id]?.message || "") : ""}</div>
             data-message-content="${message.id}"
             style="
                 display:block;
