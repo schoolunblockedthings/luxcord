@@ -527,6 +527,8 @@ function bind() {
         sendDM
     );
 
+    $("dm-cancel-reply")?.addEventListener("click", clearDMReply);
+
     bindMentionInput("message-input", "room-mention-dropdown");
     bindMentionInput("dm-input", "dm-mention-dropdown");
 
@@ -2143,6 +2145,27 @@ async function uploadDMFile(file) {
     return { url: sb.storage.from("luxcord-attachments").getPublicUrl(path).data.publicUrl, name: file.name };
 }
 
+
+function clearDMReply() {
+    window.luxReplyTarget = null;
+    close("dm-reply-bar");
+    const label = $("dm-reply-text");
+    if (label) label.textContent = "";
+}
+
+function showDMReply(target) {
+    window.luxReplyTarget = target || null;
+    const bar = $("dm-reply-bar");
+    const label = $("dm-reply-text");
+    if (!target) {
+        clearDMReply();
+        return;
+    }
+    if (label) label.textContent = "Replying to: " + String(target.text || "message").slice(0, 120);
+    open("dm-reply-bar");
+    $("dm-input")?.focus();
+}
+
 async function sendDM() {
     if (groupChat) return sendGroupMessage();
     if (!dm || !session) {
@@ -2184,7 +2207,7 @@ async function sendDM() {
 
     input.value = "";
     if (fileInput) fileInput.value = "";
-    window.luxReplyTarget = null;
+    clearDMReply();
     luxTypingSend(false);
 
     const target =
