@@ -2286,7 +2286,7 @@ async function refreshGroupChat() {
                         <div class="message-head"><b class="clickable-name" onclick="openUserProfile('${esc(message.sender_id)}')">${esc(name)}</b><time>${esc(time)}</time></div>
                         <div class="message-reply-preview">${message.reply_to_id && replyMap[message.reply_to_id] ? '↪ <b>' + esc((profileMap[replyMap[message.reply_to_id]?.sender_id] || {}).display_name || "User") + ':</b> ' + esc(replyMap[message.reply_to_id]?.message || "") : ""}</div>
                         <div class="message-text">${message.deleted_at ? '<span class="message-deleted">Message deleted</span>' : renderMentionText(message.message, mentionProfiles) + (message.edited_at ? ' <span class="message-edited">(edited)</span>' : '')}</div>
-                        \${message.attachment_url ? '<a class="message-attachment-file" href="' + esc(message.attachment_url) + '" target="_blank" rel="noopener">' + esc(message.attachment_name || "Attachment") + '</a>' : ''}
+                        ${message.attachment_url ? '<a class="message-attachment-file" href="' + esc(message.attachment_url) + '" target="_blank" rel="noopener">' + esc(message.attachment_name || "Attachment") + '</a>' : ''}
                         <div class="dm-read-state" style="font-size:11px;opacity:.65;margin-top:2px;">${esc(seen)}</div>
                     </div>
                 </article>
