@@ -3238,6 +3238,31 @@ setInterval(() => {
 
 
 // =============================
+// DM READ RECEIPT SYNC
+// =============================
+// Fetch read_at separately from message rendering so receipt changes update
+// even when the message list is intentionally not rebuilt.
+async function luxSyncDMReadStates() {
+    if (!session || !dm || groupChat || $("dms-view")?.classList.contains("hidden")) return;
+    const conversationId = dm.id;
+    const result = await sb.from("dm_messages")
+        .select("id,read_at")
+        .eq("conversation_id", conversationId)
+        .eq("sender_id", session.user.id);
+    if (result.error) {
+        console.warn("DM read-state sync:", result.error.message);
+        return;
+    }
+    const container = $("dm-messages");
+    if (!container || !dm || String(dm.id) !== String(conversationId)) return;
+    for (const message of result.data || []) {
+        const article = container.querySelector('[data-message-id="' + CSS.escape(String(message.id)) + '"]');
+        const state = article?.querySelector(".dm-read-state");
+        if (state) state.textContent = message.read_at ? "Seen" : "Sent";
+    }
+}
+
+// =============================
 // DM LIVE FALLBACK
 // =============================
 // Keep a small polling fallback alongside Supabase realtime so messages
@@ -3245,6 +3270,7 @@ setInterval(() => {
 setInterval(async () => {
     if (session && (dm || groupChat) && !$("dms-view")?.classList.contains("hidden")) {
         await refreshDM();
+        if (dm && !groupChat) await luxSyncDMReadStates();
     }
     luxRenderOnline();
 }, 3000);
