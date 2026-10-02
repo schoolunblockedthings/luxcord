@@ -443,6 +443,28 @@ function bind() {
         if (button) button.disabled = false;
     });
 
+    $("enable-desktop-notifications")?.addEventListener("click", async () => {
+        const button = $("enable-desktop-notifications");
+        const status = $("push-notification-status");
+        if (button) button.disabled = true;
+
+        if (!("Notification" in window)) {
+            if (status) status.textContent = "Desktop notifications are not supported by this browser.";
+        } else {
+            const permission = Notification.permission === "granted"
+                ? "granted"
+                : await Notification.requestPermission();
+
+            if (permission === "granted") {
+                if (status) status.textContent = "Chromebook desktop notifications are enabled.";
+            } else {
+                if (status) status.textContent = "Notifications are blocked. Enable them in Chrome settings.";
+            }
+        }
+
+        if (button) button.disabled = false;
+    });
+
     $("profile-btn")?.addEventListener(
         "click",
         openProfile
