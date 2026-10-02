@@ -80,7 +80,7 @@ async function luxEnablePushNotifications() {
         : await Notification.requestPermission();
 
     if (permission !== "granted") {
-        if (status) status.textContent = "Notifications are blocked. Enable them in iPad Settings.";
+        if (status) status.textContent = "Notifications are blocked. Enable them in your browser or device settings.";
         return false;
     }
 
