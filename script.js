@@ -109,7 +109,7 @@ async function luxEnablePushNotifications() {
     if (navigator.setAppBadge) {
         navigator.setAppBadge(document.querySelectorAll(".notification.unread").length || 0).catch?.(() => {});
     }
-    if (status) status.textContent = "iPad notifications are enabled.";
+    if (status) status.textContent = "Desktop notifications are enabled.";
     return true;
 }
 
@@ -124,9 +124,9 @@ async function luxRefreshPushStatus() {
     }
     button.disabled = false;
     if ("Notification" in window && Notification.permission === "granted") {
-        status.textContent = "Notifications are allowed. Tap to finish push setup if needed.";
+        status.textContent = "Desktop notifications are allowed. Push notifications are ready.";
     } else {
-        status.textContent = "Add Luxcord to your Home Screen, then enable notifications here.";
+        status.textContent = "Enable notifications to get ChromeOS popups in the bottom corner.";
     }
 }
 
