@@ -1985,3 +1985,11 @@ body[data-accent="blue"]{--lx-accent:#5c9dff}body[data-accent="green"]{--lx-acce
 
 /* Keep DM chat position stable; refreshes should not animate the scroll. */
 #dm-messages { scroll-behavior: auto !important; }
+
+
+.last-online {
+    display: block;
+    margin-left: 0;
+    font-size: 11px;
+    opacity: .65;
+}
