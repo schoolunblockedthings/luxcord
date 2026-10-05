@@ -1645,7 +1645,7 @@ async function loadDMs() {
     let profiles = [];
     if (ids.length) {
         const profileResult = await sb.from("profiles")
-            .select("id,username,display_name,bio,avatar_url")
+            .select("id,username,display_name,bio,avatar_url,last_seen_at")
             .in("id", ids);
         profiles = profileResult.data || [];
     }
@@ -1653,10 +1653,11 @@ async function loadDMs() {
     const dmListHTML = profiles.map((profile) => {
         const name = profile.display_name || profile.username || "User";
         return `
-            <div class="side-item" data-dm-user-id="${esc(profile.id)}" onclick="openDM('${esc(profile.id)}')">
+            <div class="side-item" data-dm-user-id="${esc(profile.id)}" data-last-seen-at="${esc(profile.last_seen_at || "")}" onclick="openDM('${esc(profile.id)}')">
                 <span onclick="event.stopPropagation(); openUserProfile('${esc(profile.id)}')" class="clickable-avatar">${avatarHTML(profile)}</span>
                 <span class="lux-online-dot" title="Offline">○</span>
                 <span onclick="event.stopPropagation(); openUserProfile('${esc(profile.id)}')" class="clickable-name">${esc(name)}</span>
+                <small class="last-online" data-last-online>${esc(luxFormatLastOnline(profile.last_seen_at).replace("Last online ", ""))}</small>
             </div>
         `;
     }).join("") || '<div class="muted" style="padding:10px">Add friends to start DMs.</div>';
@@ -2007,7 +2008,7 @@ async function loadGroupMembers(groupId) {
     const membersResult = await sb.from("group_members").select("user_id").eq("group_id", groupId);
     const memberIds = (membersResult.data || []).map((row) => row.user_id);
     const profileResult = memberIds.length
-        ? await sb.from("profiles").select("id,username,display_name,avatar_url").in("id", memberIds)
+        ? await sb.from("profiles").select("id,username,display_name,avatar_url,last_seen_at").in("id", memberIds)
         : { data: [] };
     const profileMap = Object.fromEntries((profileResult.data || []).map((profile) => [profile.id, profile]));
 
@@ -2016,12 +2017,12 @@ async function loadGroupMembers(groupId) {
         const profile = profileMap[id] || { id, display_name: "User" };
         const online = luxIsOnline(id);
         return `
-            <div class="group-member-row" data-group-member-id="${esc(id)}">
+            <div class="group-member-row" data-group-member-id="${esc(id)}" data-last-seen-at="${esc(profile.last_seen_at || "")}">
                 <div class="group-member-click" onclick="openUserProfile('${esc(id)}')">
                     ${avatarHTML(profile, "group-member-avatar")}
                     <div class="group-member-info">
                         <b>${esc(profile.display_name || profile.username || "User")}</b>
-                        <span data-group-member-status="${esc(id)}">${online ? "Online now" : "Offline"}</span>
+                        <span data-group-member-status="${esc(id)}">${online ? "Online now" : luxFormatLastOnline(profile.last_seen_at)}</span>
                     </div>
                 </div>
                 <i class="group-online-dot ${online ? "online" : ""}" data-group-member-dot="${esc(id)}" title="${online ? "Online now" : "Offline"}"></i>
@@ -3343,13 +3344,30 @@ function luxIsOnline(userId) {
         (entries || []).some(entry => String(entry?.user_id) === String(userId) && entry?.tab_open === true)
     );
 }
+function luxFormatLastOnline(value) {
+    if (!value) return "Last online unknown";
+    const time = new Date(value).getTime();
+    if (!Number.isFinite(time)) return "Last online unknown";
+    const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+    if (seconds < 60) return "Last online just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return "Last online " + minutes + (minutes === 1 ? " minute" : " minutes") + " ago";
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return "Last online " + hours + (hours === 1 ? " hour" : " hours") + " ago";
+    const days = Math.floor(hours / 24);
+    if (days < 7) return "Last online " + days + (days === 1 ? " day" : " days") + " ago";
+    return "Last online " + new Date(time).toLocaleDateString();
+}
 function luxRenderOnline() {
     document.querySelectorAll("[data-dm-user-id]").forEach(item => {
         const dot = item.querySelector(".lux-online-dot"); if (!dot) return;
         const online = luxIsOnline(item.dataset.dmUserId);
+        const lastSeen = item.dataset.lastSeenAt || "";
         dot.textContent = online ? "●" : "○";
-        dot.title = online ? "Online now" : "Offline";
+        dot.title = online ? "Online now" : luxFormatLastOnline(lastSeen);
         dot.classList.toggle("online", online);
+        const lastSeenLabel = item.querySelector("[data-last-online]");
+        if (lastSeenLabel) lastSeenLabel.textContent = online ? "Online now" : luxFormatLastOnline(lastSeen).replace("Last online ", "");
     });
 
     document.querySelectorAll("[data-group-member-id]").forEach(item => {
@@ -3357,13 +3375,15 @@ function luxRenderOnline() {
         const online = luxIsOnline(id);
         const status = item.querySelector("[data-group-member-status]");
         const dot = item.querySelector("[data-group-member-dot]");
-        if (status) status.textContent = online ? "Online now" : "Offline";
-        if (dot) { dot.classList.toggle("online", online); dot.title = online ? "Online now" : "Offline"; }
+        const lastSeen = item.dataset.lastSeenAt || "";
+        if (status) status.textContent = online ? "Online now" : luxFormatLastOnline(lastSeen);
+        if (dot) { dot.classList.toggle("online", online); dot.title = online ? "Online now" : luxFormatLastOnline(lastSeen); }
     });
 
     document.querySelectorAll("[data-profile-status-user-id]").forEach(item => {
         const online = luxIsOnline(item.dataset.profileStatusUserId);
-        item.textContent = online ? "Online now" : "Offline";
+        const lastSeen = item.dataset.lastSeenAt || "";
+        item.textContent = online ? "Online now" : luxFormatLastOnline(lastSeen);
         item.classList.toggle("online", online);
     });
 }
