@@ -2612,6 +2612,7 @@ async function openUserProfile(userId) {
     $("user-profile-username").textContent = "@" + (profile.username || "user");
     const profileOnline = luxIsOnline(profile.id);
     $("user-profile-status").dataset.profileStatusUserId = profile.id;
+    $("user-profile-status").dataset.lastSeenAt = profile.last_seen_at || "";
     $("user-profile-status").className = "user-profile-status";
     $("user-profile-status").textContent = profileOnline ? "Online now" : "Offline";
     $("user-profile-bio").textContent = profile.bio || "No bio yet.";
