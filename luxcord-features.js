@@ -312,9 +312,12 @@
   }
 
 
-  function updateLastSeen() {
+  async function updateLastSeen() {
     if (!session) return;
-    sb.from("profiles").update({last_seen_at:new Date().toISOString()}).eq("id",session.user.id);
+    const result = await sb.from("profiles")
+      .update({last_seen_at:new Date().toISOString()})
+      .eq("id",session.user.id);
+    if (result.error) console.warn("Luxcord last seen:", result.error.message);
   }
 
   const callState = { channel:null, inboxChannel:null, pc:null, local:null, remote:null, peerId:null, conversationId:null, muted:false, ringing:false, pendingIce:[] };
