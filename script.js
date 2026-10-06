@@ -3359,6 +3359,27 @@ function luxFormatLastOnline(value) {
     if (days < 7) return "Last online " + days + (days === 1 ? " day" : " days") + " ago";
     return "Last online " + new Date(time).toLocaleDateString();
 }
+async function luxRefreshLastSeen() {
+    if (!session) return;
+    const ids = [...new Set([
+        ...[...document.querySelectorAll("[data-dm-user-id]")].map(el => el.dataset.dmUserId),
+        ...[...document.querySelectorAll("[data-group-member-id]")].map(el => el.dataset.groupMemberId),
+        ...[...document.querySelectorAll("[data-profile-status-user-id]")].map(el => el.dataset.profileStatusUserId)
+    ].filter(Boolean))];
+    if (!ids.length) return;
+    const result = await sb.from("profiles").select("id,last_seen_at").in("id", ids);
+    if (result.error) return;
+    const seen = Object.fromEntries((result.data || []).map(row => [String(row.id), row.last_seen_at]));
+    document.querySelectorAll("[data-dm-user-id],[data-group-member-id]").forEach(el => {
+        const id = String(el.dataset.dmUserId || el.dataset.groupMemberId || "");
+        if (seen[id]) el.dataset.lastSeenAt = seen[id];
+    });
+    document.querySelectorAll("[data-profile-status-user-id]").forEach(el => {
+        const id = String(el.dataset.profileStatusUserId || "");
+        if (seen[id]) el.dataset.lastSeenAt = seen[id];
+    });
+    luxRenderOnline();
+}
 function luxRenderOnline() {
     document.querySelectorAll("[data-dm-user-id]").forEach(item => {
         const dot = item.querySelector(".lux-online-dot"); if (!dot) return;
@@ -3459,6 +3480,7 @@ setInterval(async () => {
         }
     }
     luxRenderOnline();
+    await luxRefreshLastSeen();
 }, 3000);
 
 document.addEventListener("visibilitychange", async () => {
